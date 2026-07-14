@@ -1,0 +1,6 @@
+[
+  {
+    "label": "Run tests",
+    "command": "cargo test -- --nocapture"
+  }
+]

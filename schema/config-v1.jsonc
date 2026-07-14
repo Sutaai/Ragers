@@ -1,0 +1,118 @@
+// Editor I used: https://www.metaconfigurator.org/schema
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Ragers config file definition",
+  "type": "object",
+  "properties": {
+    "recipients": {
+      "$ref": "#/$defs/recipients"
+    },
+    "groups": {
+      "$ref": "#/$defs/groups"
+    },
+    "files": {
+      "$ref": "#/$defs/files"
+    }
+  },
+  "required": [
+    "recipients"
+  ],
+  "$defs": {
+    "recipients": {
+      "type": "object",
+      "properties": {
+        "files": {
+          "type": "object",
+          "title": "Recipients Files",
+          "description": "A list of files containing a list of recipients that may decode a file.",
+          "additionalProperties": {
+            "type": "string",
+            "title": "Recipient File",
+            "description": "A recipient file path. The key is the name of the file defined in this config file. The value is the path of the file."
+          }
+        }
+      },
+      "title": "Recipients",
+      "description": "A list of recipients that may decrypt/encrypt a file that is defined in this file. The key is the name of the file defined in this config file. The value is the u. At least one recipient must be defined.",
+      "additionalProperties": {
+        "type": "string",
+        "title": "Recipient",
+        "description": "A recipient. Can decrypt/encrypt a file if defined."
+      }
+    },
+    "groups": {
+      "type": "object",
+      "properties": {},
+      "title": "Groups",
+      "description": "A list of group that may decrypt/encrypt files defined in this config..",
+      "additionalProperties": {
+        "type": "array",
+        "title": "Group",
+        "description": "A group. Contains a list of defined recipients that are included in this group.",
+        "items": {
+          "type": "string",
+          "title": "Recipient",
+          "description": "A recipient. This recipient is part of the group they're defined in."
+        }
+      }
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "src": {
+            "type": "string",
+            "title": "Source file",
+            "description": "The source path of the file you wish to encrypt.",
+            "format": "iri-reference"
+          },
+          "out": {
+            "type": "string",
+            "title": "Output file",
+            "description": "The output path of the file you wish to encrypt.",
+            "format": "iri-reference"
+          },
+          "recipients": {
+            "type": "array",
+            "title": "Recipients",
+            "description": "List of recipients that can decrypt this file.",
+            "items": {
+              "type": "string",
+              "title": "Recipient",
+              "description": "A recipient that may encrypt/decrypt this file. Can be a singular recipient, a group, or a file. See documentation for string format."
+            }
+          },
+          "armor": {
+            "type": "boolean",
+            "title": "Armor",
+            "description": "Indicate if the output file should be encrypted using the armor format.",
+            "default": false
+          },
+          "encryptors": {
+            "type": "array",
+            "title": "Encryptors",
+            "description": "A list of encryptors. These are the persons who have the ability to encrypt this file.",
+            "items": {
+              "type": "string",
+              "title": "Encryptor",
+              "description": "An encryptor. Can encrypt this file.",
+              "minLength": 1
+            }
+          }
+        },
+        "required": [
+          "src",
+          "out",
+          "recipients"
+          // "encryptors"
+        ],
+        "title": "File",
+        "description": "Configuration of the file you wish to encrypt.",
+        "additionalProperties": false
+      },
+      "title": "Files",
+      "description": "A list of files you wish to encrypt."
+    }
+  }
+}

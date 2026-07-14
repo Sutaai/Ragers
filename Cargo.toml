@@ -1,0 +1,24 @@
+[package]
+name = "ragers"
+authors = ["Sutaai <sutaai@proton.me>"]
+description = "Ragers - Rust age's repository solution"
+version = "0.1.0"
+edition = "2024"
+
+# First version edited with
+rust-version = "1.96"
+readme = "README.md"
+repository = "codeberg.org/Sutaai/ragers"
+license = "MIT"
+publish = false
+
+[dependencies]
+age = { version = "0.11.3", features = ["armor", "ssh"] }
+clap = { version = "4.6.1", features = ["cargo", "derive", "env"] }
+config = { version = "0.15.25", features = ["yaml"] }
+env_logger = { version = "0.11.11", features = ["color", "kv"] }
+inquire = "0.9.4"
+itertools = "0.15.0"
+log = "0.4.33"
+serde = { version = "1.0.228", features = ["serde_derive"] }
+thiserror = { version = "2.0.19", features = ["std"] }

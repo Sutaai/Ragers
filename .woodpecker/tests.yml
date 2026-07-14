@@ -1,0 +1,20 @@
+when:
+  - event: push
+    path:
+      include: [ 'src/**', 'tests/**', 'Cargo.toml', 'Cargo.lock', '.woodpecker/tests.yml' ]
+
+steps:
+  - name: build
+    image: rust:1-alpine
+    commands:
+      - cargo install --locked cargo-tarpaulin
+      - d
+    volumes:
+    - $CI_WORKSPACE:/repo
+
+  - name: deploy
+    image: codeberg.org/sugar700/plugin-codeberg-pages-deploy:1
+    settings:
+      folder: _site
+      ssh_key:
+        from_secret: ssh_key

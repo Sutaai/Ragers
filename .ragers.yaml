@@ -1,0 +1,33 @@
+$schema: "schema/config-v1.jsonc"
+
+recipients:
+  user1: age1uqwrj0efvkgph205v0629vfdl2p9c2czpqhgd5uscqg7wkzvzf8s0dagj6
+  user2: age1he2dpmrv5q3l8u6gurygsuxxqjv647w6fy0fxx6wj2wd2d863szq0dlemx
+  user5: age1ay85wq8ydt2jckmm4yv9eulm5wec5wm43l0f6yg5ttewms8j3ytqd4ke7g
+  user6: age1mkg2jzm5fq4a0hus9uls60u5jjst7gtqh3tx6g6pxgvwkp3pwu3qhggrzm
+
+  files:
+    test1: tests/definitions/assets/Rec1.txt
+    test3: tests/definitions/assets/Rec3.txt
+
+groups:
+  admins:
+    - user5
+    - user6
+
+files:
+  - src: tests/definitions/assets/File1.txt
+    out: tests/definitions/assets/File1.txt.age
+    recipients:
+      - user1
+      - user2
+
+  - src: tests/definitions/assets/File2.txt
+    out: tests/definitions/assets/File2.txt.age
+    recipients:
+      - file:test1
+
+  - src: tests/definitions/assets/File3.txt
+    out: tests/definitions/assets/File3.txt.age
+    recipients:
+      - group:admins
