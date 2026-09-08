@@ -32,9 +32,9 @@ Only standard age X55219 and SSH (recipient-based) encryption will be supported.
 
 AI Disclaimer:
 
-The author declares that no AI has been used to write in the entirety or part of the codebase. Help as been obtained for the only purpose of teaching certain aspect of Rust and for refactoring advices, without allowing the AI to write into the codebase. Human review is the only source of code.
+The author declares that few AI has been used to write the project. The majority of the code has been written by themselves with the help of AI only for initial implementation of a few final parts of the application. However, AI is not the main way of production to realize this application and is only used as an assisting tool.
 
-Basically, [it's brain-made](https://brainmade.org/). Though my personal sensibility to AI's hate is... nuanced.
+Basically, [it's brain-made](https://brainmade.org/).
 
-If the code is shit, well, it's my fault lol.
-But hey, I could have written entirely in Python instead. Wink wink.
+If the code is shit, well, it's my fault, not Claude's.
+But hey, it could have been written in Python instead. Wink wink.
