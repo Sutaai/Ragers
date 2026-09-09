@@ -13,7 +13,7 @@ My cat duly recommend the usage of Ragers only once v1.0 hit the streets.
 
 ## State
 
-A simple projet management board can be found here: <https://sites.plane.so/issues/44ee0d0a1bcb490b81f56907fb46e47f>
+A simple projet management board can be found here: <https://codeberg.org/Sutaai/Ragers/projects/67840>
 
 Plugins are NOT supported or intended for the moment being.
 
