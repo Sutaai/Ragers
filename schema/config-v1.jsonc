@@ -1,14 +1,14 @@
-// Editor I used: https://www.metaconfigurator.org/schema
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Ragers config file definition",
   "type": "object",
   "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Schema definition"
+    },
     "recipients": {
       "$ref": "#/$defs/recipients"
-    },
-    "groups": {
-      "$ref": "#/$defs/groups"
     },
     "files": {
       "$ref": "#/$defs/files"
@@ -17,10 +17,27 @@
   "required": [
     "recipients"
   ],
+  "additionalProperties": false,
   "$defs": {
     "recipients": {
       "type": "object",
       "properties": {
+        "groups": {
+          "type": "object",
+          "properties": {},
+          "title": "Groups",
+          "description": "A list of group that may decrypt/encrypt files defined in this config..",
+          "additionalProperties": {
+            "type": "array",
+            "title": "Group",
+            "description": "A group. Contains a list of defined recipients that are included in this group.",
+            "items": {
+              "type": "string",
+              "title": "Recipient",
+              "description": "A recipient. This recipient is part of the group they're defined in."
+            }
+          }
+        },
         "files": {
           "type": "object",
           "title": "Recipients Files",
@@ -38,22 +55,6 @@
         "type": "string",
         "title": "Recipient",
         "description": "A recipient. Can decrypt/encrypt a file if defined."
-      }
-    },
-    "groups": {
-      "type": "object",
-      "properties": {},
-      "title": "Groups",
-      "description": "A list of group that may decrypt/encrypt files defined in this config..",
-      "additionalProperties": {
-        "type": "array",
-        "title": "Group",
-        "description": "A group. Contains a list of defined recipients that are included in this group.",
-        "items": {
-          "type": "string",
-          "title": "Recipient",
-          "description": "A recipient. This recipient is part of the group they're defined in."
-        }
       }
     },
     "files": {
@@ -105,7 +106,6 @@
           "src",
           "out",
           "recipients"
-          // "encryptors"
         ],
         "title": "File",
         "description": "Configuration of the file you wish to encrypt.",

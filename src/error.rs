@@ -24,7 +24,8 @@ pub struct NotFound(pub String);
 pub enum ConfigError {
     #[error("Could not parse config file: {0}")]
     ParseError(#[from] config::ConfigError),
-    #[error("Validation error: {0}")]
+    // #[error("Validation error: {0}")]
+    #[error(transparent)]
     ValidationError(#[from] ConfigValidationError),
 }
 
@@ -32,8 +33,8 @@ pub enum ConfigError {
 pub enum ConfigValidationError {
     #[error(
         "Invalid recipient:
-Alias: {key}
-Error: {parse_error:?}"
+- Alias: {key}
+- Error: {parse_error:?}"
     )]
     InvalidRecipient {
         key: String,
@@ -42,21 +43,21 @@ Error: {parse_error:?}"
     },
     #[error(
         "Duplicated recipient:
-Alias: {value}
+- Alias: {value}
 
 Note: The key is not the duplicated value but the value itself"
     )]
     DuplicatedRecipient { value: String },
     #[error(
         "Recipients file not found:
-Key: {key}
-Path: {path:?}"
+- Key: {key}
+- Path: {path:?}"
     )]
     RecipientsFileNotFound { key: String, path: String },
     #[error(
         "Recipient in group not found:
-Group: {group}
-Recipient: {alias}"
+- Group: {group}
+- Recipient: {alias}"
     )]
     RecipientInGroupNotFound { group: String, alias: String },
     #[error("File with duplicated source path at index {}
@@ -74,7 +75,23 @@ Duplicated alias: {}", .index, .alias)]
 }
 
 #[derive(Error, Debug)]
+pub enum RecipientsFactoryError {
+    #[error(transparent)]
+    NotFound(#[from] NotFound),
+    #[error(transparent)]
+    RecipientParseError(#[from] RecipientParseError),
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error)
+}
+
+#[derive(Error, Debug)]
 pub enum CmdError {
-    #[error("config: {0}")]
-    Config(ConfigError),
+    #[error(transparent)]
+    Config(#[from] ConfigError),
+
+    #[error("Config validation error: {0}")]
+    Validation(#[from] ConfigValidationError),
+
+    #[error(transparent)]
+    RecipientsFactory(#[from] RecipientsFactoryError)
 }

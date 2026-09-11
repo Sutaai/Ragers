@@ -2,7 +2,7 @@
 name = "ragers"
 authors = ["Sutaai <sutaai@proton.me>"]
 description = "Ragers - Rust age's repository solution"
-version = "0.1.0"
+version = "0.2.0-dev.1"
 edition = "2024"
 
 # First version edited with

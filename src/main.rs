@@ -3,8 +3,7 @@ use env_logger::fmt::style;
 use std::io::Write;
 
 use crate::{
-    cli::{Cli, decrypt, encrypt},
-    error::CmdError,
+    cli::{Cli, decrypt, encrypt}, config::RawConfig, error::CmdError,
 };
 
 mod cli;
@@ -64,21 +63,22 @@ fn handle_cmd_error(_err: CmdError) {
 }
 
 fn main() {
-    match wrap_execution() {
+    let cli = Cli::parse();
+    setup_logger(&cli.log_level);
+
+    match wrap_execution(cli) {
         Ok(_) => {} // Execution is done
         Err(err) => handle_cmd_error(err),
     }
 }
 
-fn wrap_execution() -> Result<(), CmdError> {
-    let cli = Cli::parse();
-    setup_logger(&cli.log_level);
-
-    let ctx = context::Context::new(cli)?;
+fn wrap_execution(cli: Cli) -> Result<(), CmdError> {
+    let config = RawConfig::new(&cli.config_path)?;
+    let mut ctx = context::Context::new(cli, &config)?;
 
     match &ctx.cli.command {
-        Some(cli::Commands::Encrypt { files }) => encrypt(&ctx, files)?,
-        Some(cli::Commands::Decrypt { files }) => decrypt(&ctx, files)?,
+        Some(cli::Commands::Encrypt { files }) => encrypt(&ctx, &files)?,
+        Some(cli::Commands::Decrypt { files }) => decrypt(&ctx, &files)?,
         None => {
             Cli::command().print_help().unwrap();
         }

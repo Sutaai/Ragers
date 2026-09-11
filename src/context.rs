@@ -1,53 +1,22 @@
-use std::collections::HashMap;
 use std::path::PathBuf;
-use std::rc::Rc;
 
 use log::warn;
 
 use crate::cli::Cli;
-use crate::config::{Config, RecipientParsed, parse_age_recipient};
+use crate::config::{RawConfig, RecipientsFactory};
 use crate::error::CmdError;
 
-pub struct Context {
+pub struct Context<'config> {
     pub cli: Cli,
-    pub config: Config,
+    pub config: &'config RawConfig,
+    pub recipients_factory: RecipientsFactory<'config>
 }
 
-impl Context {
-    pub fn new(cli: Cli) -> Result<Self, CmdError> {
-        // TODO: WEWY BAWD
-        let config = Config::new(&cli.config).map_err(|op| CmdError::Config(op))?;
+impl<'config> Context<'config> {
+    pub fn new(cli: Cli, config: &'config RawConfig) -> Result<Self, CmdError> {
+        let recipients_factory = RecipientsFactory::new(&config.recipients);
 
-        Ok(Self { cli, config })
-    }
-}
-
-pub struct AgeRecipientsCache {
-    recipients: HashMap<String, Rc<dyn age::Recipient>>,
-}
-
-impl AgeRecipientsCache {
-    pub fn new() -> Self {
-        Self {
-            recipients: HashMap::new(),
-        }
-    }
-
-    /// Obtain the age's Recipient struct from an age recipient's public key string.
-    ///
-    /// This method will cache the converted recipient. This is the way to obtain an
-    /// `age::Recipient` from its corresponding string.
-    pub fn obtain(&mut self, age_key_str: &str) -> &Rc<dyn age::Recipient> {
-        self.recipients
-            .entry(age_key_str.to_owned())
-            .or_insert_with(|| {
-                match parse_age_recipient(age_key_str).expect(&format!(
-                    "could not parse age key \"{age_key_str}\", unexpected pre-condition"
-                )) {
-                    RecipientParsed::X25519(recipient) => Rc::new(recipient),
-                    RecipientParsed::SSH(recipient) => Rc::new(recipient),
-                }
-            })
+        Ok(Self { cli, config, recipients_factory })
     }
 }
 

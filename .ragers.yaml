@@ -6,14 +6,14 @@ recipients:
   user5: age1ay85wq8ydt2jckmm4yv9eulm5wec5wm43l0f6yg5ttewms8j3ytqd4ke7g
   user6: age1mkg2jzm5fq4a0hus9uls60u5jjst7gtqh3tx6g6pxgvwkp3pwu3qhggrzm
 
+  groups:
+    admins:
+      - user5
+      - user6
+ 
   files:
     test1: tests/definitions/assets/Rec1.txt
     test3: tests/definitions/assets/Rec3.txt
-
-groups:
-  admins:
-    - user5
-    - user6
 
 files:
   - src: tests/definitions/assets/File1.txt

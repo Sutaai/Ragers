@@ -1,31 +1,46 @@
 use std::{
     collections::{HashMap, HashSet},
     path::{Path, PathBuf},
+    rc::Rc,
     str::FromStr,
 };
 
 use itertools::Itertools;
-use log::{debug, error, info, trace};
+use log::{debug, error, info};
 use serde::{Deserialize, Serialize};
 
-use crate::error::{ConfigError, ConfigValidationError, NotFound, RecipientParseError};
+use crate::error::{
+    ConfigError, ConfigValidationError, NotFound, RecipientParseError, RecipientsFactoryError,
+};
 
-type ConfigGroups = HashMap<String, Vec<String>>;
-type ConfigDirectRecipients = HashMap<String, String>;
-type ConfigFiles = HashMap<String, PathBuf>;
-
+/// Struct representation of the Ragers config file. Used for deserialization. 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct ConfigRecipients {
-    /// A list of recipients that may be used to encrypt and/or decrypt files
-    #[serde(flatten, rename = "recipients")]
-    pub direct: ConfigDirectRecipients,
-    /// A list of recipients files. These files holds a list of public keys.
+pub struct RawConfig {
+    /// A list of pre-defined recipients
+    pub recipients: RawConfigRecipients,
+    /// A list of files to encrypt
     #[serde(default)]
-    pub files: ConfigFiles,
+    pub files: Vec<RawConfigFile>,
 }
 
+/// Struct representation of recipients definition in the config file. Part of `RawConfig`.
 #[derive(Serialize, Deserialize, Debug)]
-pub struct ConfigFile {
+pub struct RawConfigRecipients {
+    /// A list of recipients that may be used to encrypt and/or decrypt files
+    #[serde(flatten, rename = "recipients")]
+    pub direct: HashMap<String, String>,
+    /// A list of groups
+    #[serde(default)]
+    pub groups: HashMap<String, Vec<String>>,
+    /// A list of recipients files. These files holds a list of public keys.
+    #[serde(default)]
+    pub files: HashMap<String, PathBuf>,
+}
+
+/// Struct representation of files (to encrypt/decrypt) definition in the config file. Part of
+/// `RawConfig`.
+#[derive(Serialize, Deserialize, Debug)]
+pub struct RawConfigFile {
     /// The path of the unencrypted file source
     pub src: PathBuf,
     /// The path to the encrypted file output
@@ -37,19 +52,11 @@ pub struct ConfigFile {
     pub armor: bool,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct Config {
-    /// A list of pre-defined recipients
-    pub recipients: ConfigRecipients,
-    /// A list of groups
-    #[serde(default)]
-    pub groups: ConfigGroups,
-    /// A list of files to encrypt
-    #[serde(default)]
-    pub files: Vec<ConfigFile>,
-}
-
-impl Config {
+impl RawConfig {
+    /// Creates a new instance of `RawConfig` by reading the file at `config_path`.
+    /// 
+    /// This function will read the path it is given and attempt to deserialize it through their
+    /// structs representation.
     pub fn new(config_path: &Path) -> Result<Self, ConfigError> {
         let builder = config::Config::builder()
             .add_source(config::File::from(config_path))
@@ -73,88 +80,30 @@ impl Config {
             }
         }
     }
-
-    /// Get a recipient from the list of direct recipients, or fail.
-    fn get_direct_recipient(&self, key: &str) -> Result<&str, NotFound> {
-        trace!("Obtaining {key} as direct recipient");
-        let recipient = self
-            .recipients
-            .direct
-            .get(key)
-            .ok_or_else(|| NotFound(key.to_owned()))?;
-
-        Ok(recipient)
-    }
-
-    /// Get a recipients file, or fail.
-    fn get_recipients_file(&self, key: &str) -> Result<&PathBuf, NotFound> {
-        trace!("Obtaining {key} as recipients file");
-        let recipient = self
-            .recipients
-            .files
-            .get(key)
-            .ok_or_else(|| NotFound(key.to_owned()))?;
-
-        Ok(recipient)
-    }
-
-    /// Get a group, or fail.
-    fn get_group(&self, key: &str) -> Result<&Vec<String>, NotFound> {
-        trace!("Obtaining {key} as group");
-        let recipient = self
-            .groups
-            .get(key)
-            .ok_or_else(|| NotFound(key.to_owned()))?;
-
-        Ok(recipient)
-    }
-
-    /// Get all recipients from an alias.
-    ///
-    /// This function will lookup the given alias to return all age recipients public key it is
-    /// assicuated. Only the string representation of the age recipient is returned, it remains to
-    /// be converted into its struct representation.
-    pub fn get_age_recipients_str_from_alias(&self, alias: &str) -> Result<Vec<String>, NotFound> {
-        // Must be owned because we're reading from recipients files
-        let mut recipients: Vec<String> = Vec::new();
-
-        match get_alias_kind(alias) {
-            AliasKind::Group(key) => {
-                let group = self.get_group(&key)?;
-                for alias in group {
-                    trace!("From alias \"{alias}\", getting recipient and pushing");
-                    let recipient = self.get_direct_recipient(&alias)?;
-                    recipients.push(recipient.to_owned());
-                }
-            }
-            AliasKind::RecipientsFile(key) => {
-                let file_path = self.get_recipients_file(&key)?;
-                let recipients_from_file = read_recipients_file(file_path)
-                    .expect(&format!("could not open file: \"{}\"", file_path.display()));
-                recipients.extend(recipients_from_file);
-            }
-            AliasKind::DirectRecipient(key) => {
-                let recipient_key = self.get_direct_recipient(&key)?;
-                recipients.push(recipient_key.to_owned());
-            }
-        }
-
-        Ok(recipients)
-    }
 }
 
+/// Type that must be returned by each validating functions in `ConfigValidator`.
 type ConfCheckResult = Result<(), ConfigValidationError>;
+
+/// Struct aiming to validate `RawConfig` values.
+/// 
+/// The `ConfigValidator` aims to validate a given `RawConfig` through the
+/// `ConfigValidator::validate` function to ensure the file is valid and will not prompt any error
+/// during the program's execution.
+/// 
+/// Thus, once validated, it should be safe to use `RawConfig` and references made in it should be
+/// safe.
 pub struct ConfigValidator;
 
 impl ConfigValidator {
-    pub fn validate(self, config: &Config) -> Result<(), Vec<ConfigValidationError>> {
+    pub fn validate(self, config: &RawConfig) -> Result<(), Vec<ConfigValidationError>> {
         let mut all_errors: Vec<ConfigValidationError> = vec![];
 
         for check in [
             self.check_recipients_age_valid(config),
             self.check_recipients_value_unique(config),
             self.check_recipients_file_valid_path(config),
-            self.check_groups_valid_users(config),
+            self.check_groups_valid_recipients(config),
             self.check_files_unique_source(config),
             self.check_files_unique_destination(config),
             self.check_files_valid_recipients(config),
@@ -173,7 +122,9 @@ impl ConfigValidator {
         }
     }
 
-    fn check_recipients_age_valid(&self, config: &Config) -> ConfCheckResult {
+    fn check_recipients_age_valid(&self, config: &RawConfig) -> ConfCheckResult {
+        log::trace!("Checking if all recipients are valid");
+
         let recipients = &config.recipients.direct;
 
         for (alias, raw_recipient) in recipients {
@@ -191,7 +142,9 @@ impl ConfigValidator {
         Ok(())
     }
 
-    fn check_recipients_value_unique(&self, config: &Config) -> ConfCheckResult {
+    fn check_recipients_value_unique(&self, config: &RawConfig) -> ConfCheckResult {
+        log::trace!("Checking recipients are unique");
+
         let recipients = &config.recipients.direct;
         let mut seen: HashSet<&String> = HashSet::new();
 
@@ -206,7 +159,9 @@ impl ConfigValidator {
         Ok(())
     }
 
-    fn check_recipients_file_valid_path(&self, config: &Config) -> ConfCheckResult {
+    fn check_recipients_file_valid_path(&self, config: &RawConfig) -> ConfCheckResult {
+        log::trace!("Checking recipients files are valid");
+
         let files = &config.recipients.files;
 
         for (alias, path) in files {
@@ -224,8 +179,10 @@ impl ConfigValidator {
         Ok(())
     }
 
-    fn check_groups_valid_users(&self, config: &Config) -> ConfCheckResult {
-        let groups = &config.groups;
+    fn check_groups_valid_recipients(&self, config: &RawConfig) -> ConfCheckResult {
+        log::trace!("Checking groups contain valid recipients");
+
+        let groups = &config.recipients.groups;
         let recipients: &Vec<&String> = &config.recipients.direct.keys().collect();
 
         for (group, members) in groups {
@@ -242,7 +199,9 @@ impl ConfigValidator {
         Ok(())
     }
 
-    fn check_files_unique_source(&self, config: &Config) -> ConfCheckResult {
+    fn check_files_unique_source(&self, config: &RawConfig) -> ConfCheckResult {
+        log::trace!("Checking recipients files source are unique");
+
         let files = &config.files;
         let mut seen: HashSet<&PathBuf> = HashSet::new();
 
@@ -258,7 +217,9 @@ impl ConfigValidator {
         Ok(())
     }
 
-    fn check_files_unique_destination(&self, config: &Config) -> ConfCheckResult {
+    fn check_files_unique_destination(&self, config: &RawConfig) -> ConfCheckResult {
+        log::trace!("Checking files destination are unique");
+
         let files = &config.files;
         let mut seen: HashSet<&PathBuf> = HashSet::new();
 
@@ -274,41 +235,30 @@ impl ConfigValidator {
         Ok(())
     }
 
-    fn check_files_valid_recipients(&self, config: &Config) -> ConfCheckResult {
+    fn check_files_valid_recipients(&self, config: &RawConfig) -> ConfCheckResult {
+        log::trace!("Checking files recipients are valid");
+
+        let mut recipients_factory = RecipientsFactory::new(&config.recipients);
+
         for (index, file) in config.files.iter().enumerate() {
             for unparsed_recipient in &file.recipients {
-                match get_alias_kind(unparsed_recipient) {
-                    AliasKind::DirectRecipient(recipient) => {
-                        if config.get_direct_recipient(&recipient).is_err() {
-                            return Err(ConfigValidationError::FileAliasNotFound {
-                                index,
-                                alias: unparsed_recipient.to_owned(),
-                            });
-                        }
-                    }
-                    AliasKind::Group(group) => {
-                        if config.get_group(&group).is_err() {
-                            return Err(ConfigValidationError::FileAliasNotFound {
-                                index,
-                                alias: unparsed_recipient.to_owned(),
-                            });
-                        }
-                    }
-                    AliasKind::RecipientsFile(file) => {
-                        if config.get_recipients_file(&file).is_err() {
-                            return Err(ConfigValidationError::FileAliasNotFound {
-                                index,
-                                alias: unparsed_recipient.to_owned(),
-                            });
-                        }
+                match recipients_factory.obtain_from_alias(unparsed_recipient) {
+                    Ok(_) => {},
+                    Err(_) => {
+                        return Err(ConfigValidationError::FileAliasNotFound {
+                            index,
+                            alias: unparsed_recipient.to_owned(),
+                        });
                     }
                 };
-            }
+            };
         }
         Ok(())
     }
 
-    fn check_files_recipients_unique(&self, config: &Config) -> ConfCheckResult {
+    fn check_files_recipients_unique(&self, config: &RawConfig) -> ConfCheckResult {
+        log::trace!("Checking files recipients are unique");
+
         for (index, file) in config.files.iter().enumerate() {
             let mut recipients: Vec<&String> =
                 file.recipients.iter().duplicates().dedup().collect();
@@ -368,7 +318,7 @@ pub enum AliasKind {
     Group(String),
 }
 
-pub fn get_alias_kind(alias: &str) -> AliasKind {
+fn get_alias_kind(alias: &str) -> AliasKind {
     if let Some(stripped) = alias.strip_prefix("file:") {
         AliasKind::RecipientsFile(stripped.to_owned())
     } else if let Some(stripped) = alias.strip_prefix("group:") {
@@ -397,4 +347,139 @@ fn read_recipients_file(file: &PathBuf) -> Result<Vec<String>, std::io::Error> {
     }
 
     Ok(parsed_recipients)
+}
+
+/// The `RecipientsFactory` implement logic for looking up recipients and returning their
+/// according `age::Recipient` struct.
+///
+/// `RecipientsFactory` is the entrypoint for managing recipients in all kind of ways throughout
+/// the application's lifetime, mostly handling parsing and caching.
+///
+/// Caching is done to avoid re-parsing a known recipient that has already been parsed.
+/// The cache has an infinite longevity and none of its element ever dies. This is an
+/// assumed implementation as it is assumed the impact is not severe enough in the usage of the
+/// tool to be an issue.
+pub struct RecipientsFactory<'config> {
+    /// Recipients part of the config file.
+    config_recipients: &'config RawConfigRecipients,
+    /// Cache containing age recipients. Key: age recipient as string.
+    /// Value: struct age::Recipient
+    direct_recipients_cache: HashMap<String, Rc<dyn age::Recipient>>,
+}
+
+impl<'config> RecipientsFactory<'config> {
+    /// Return a new instance of `RecipientsFactory`.
+    pub fn new(recipients: &'config RawConfigRecipients) -> Self {
+        Self {
+            config_recipients: recipients,
+            direct_recipients_cache: HashMap::new(),
+        }
+    }
+
+    fn direct_recipient(
+        &mut self,
+        config_key: &str,
+    ) -> Result<&Rc<dyn age::Recipient>, RecipientsFactoryError> {
+        let age_recipient_str = self
+            .config_recipients
+            .direct
+            .get(config_key)
+            .ok_or_else(|| NotFound(config_key.to_owned()))?;
+
+        if !self.direct_recipients_cache.contains_key(age_recipient_str) {
+            log::debug!("{age_recipient_str} is not cached, parsing");
+
+            let struct_recipient: Rc<dyn age::Recipient> =
+                match parse_age_recipient(age_recipient_str)? {
+                    RecipientParsed::X25519(recipient) => Rc::new(recipient),
+                    RecipientParsed::SSH(recipient) => Rc::new(recipient),
+                };
+
+            self.direct_recipients_cache
+                .insert(age_recipient_str.to_owned(), struct_recipient);
+        }
+
+        log::trace!("Fetching {age_recipient_str}");
+
+        let age_recipient = self
+            .direct_recipients_cache
+            .get(age_recipient_str)
+            .expect(&format!(
+                "expected {age_recipient_str} to exist in factory cache, but nothing was found"
+            ));
+
+        Ok(age_recipient)
+    }
+
+    fn group(
+        &mut self,
+        config_key: &str,
+    ) -> Result<Vec<Rc<dyn age::Recipient>>, RecipientsFactoryError> {
+        let mut parsed_recipients = vec![];
+
+        let group = self
+            .config_recipients
+            .groups
+            .get(config_key)
+            .ok_or_else(|| NotFound(config_key.to_owned()))?;
+
+        for recipient_reference_key in group {
+            let recipient = self.direct_recipient(recipient_reference_key)?;
+            parsed_recipients.push(Rc::clone(recipient));
+        }
+
+        Ok(parsed_recipients)
+    }
+
+    fn file(
+        &mut self,
+        config_key: &str,
+    ) -> Result<Vec<Rc<dyn age::Recipient>>, RecipientsFactoryError> {
+        let mut parsed_recipients = vec![];
+
+        let file_path = self
+            .config_recipients
+            .files
+            .get(config_key)
+            .ok_or_else(|| NotFound(config_key.to_owned()))?;
+
+        let file_content = read_recipients_file(file_path)?;
+
+        for recipient_str in file_content {
+            let recipient = self.direct_recipient(&recipient_str)?;
+            parsed_recipients.push(Rc::clone(recipient));
+        }
+
+        Ok(parsed_recipients)
+    }
+
+    pub fn obtain_from_alias(
+        &mut self,
+        alias: &str,
+    ) -> Result<Vec<Rc<dyn age::Recipient>>, RecipientsFactoryError> {
+        let recipients = match get_alias_kind(alias) {
+            AliasKind::Group(key) => self.group(&key)?,
+            AliasKind::RecipientsFile(key) => self.file(&key)?,
+            AliasKind::DirectRecipient(key) => {
+                let recipient = self.direct_recipient(&key)?;
+                vec![Rc::clone(recipient)]
+            }
+        };
+
+        Ok(recipients)
+    }
+
+    pub fn obtain_for_file(
+        &mut self,
+        config_file: &RawConfigFile,
+    ) -> Result<Vec<Rc<dyn age::Recipient>>, RecipientsFactoryError> {
+        let mut fetched_recipients = vec![];
+
+        for alias in &config_file.recipients {
+            let recipients = self.obtain_from_alias(alias)?;
+            fetched_recipients.extend(recipients);
+        }
+
+        Ok(fetched_recipients)
+    }
 }

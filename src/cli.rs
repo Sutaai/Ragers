@@ -11,9 +11,7 @@ use itertools::Itertools;
 use log::error;
 
 use crate::{
-    config::ConfigFile,
-    context::{AgeRecipientsCache, Context, load_identities, load_identities_from_values},
-    error::CmdError,
+    config::RawConfigFile, context::{Context, load_identities, load_identities_from_values}, error::{CmdError, RecipientsFactoryError},
 };
 
 #[derive(Parser)]
@@ -33,8 +31,8 @@ pub struct Cli {
     pub log_level: log::LevelFilter,
 
     #[arg(
-        short,
-        long,
+        short = 'c',
+        long = "config",
         action = clap::ArgAction::Set,
         default_value = ".ragers.yaml",
         // default_values = [".ragers.yaml", ".ragers.yml"], // For now this is confusing me too much, lack of documentation
@@ -44,7 +42,7 @@ pub struct Cli {
         value_parser = clap::value_parser!(PathBuf),
         long_help = "Path the Ragers configuration file. This must specify a path to a YAML file that can be read as per Ragers's configuration standard. This config file is used to determine which and how are files are encrypted. Refer to documentation."
     )]
-    pub config: PathBuf,
+    pub config_path: PathBuf,
 
     #[arg(
         short = 'I',
@@ -110,27 +108,10 @@ fn find_comparable_path<'a>(path: &PathBuf, list: &'a [PathBuf]) -> Option<&'a P
     None
 }
 
-fn begin_encrypt_files(ctx: &Context, files: &[&ConfigFile]) {
-    let mut recipients_cache: AgeRecipientsCache = AgeRecipientsCache::new();
-
+fn begin_encrypt_files(ctx: &mut Context, files: &[&RawConfigFile]) -> Result<(), RecipientsFactoryError> {
     for file in files {
         // Obtain recipients
-        let recipients: Vec<String> = file
-            .recipients
-            .iter()
-            .map(|alias| {
-                return ctx
-                    .config
-                    .get_age_recipients_str_from_alias(alias)
-                    .expect("expected all recipients to exist");
-            })
-            .flatten()
-            .collect();
-
-        let age_recipients: Vec<Rc<dyn age::Recipient>> = recipients
-            .iter()
-            .map(|key| Rc::clone(recipients_cache.obtain(key)))
-            .collect();
+        let age_recipients = ctx.recipients_factory.obtain_for_file(&file)?;
 
         let recipient_refs: Vec<&dyn age::Recipient> =
             age_recipients.iter().map(|r| r.as_ref()).collect();
@@ -172,10 +153,13 @@ fn begin_encrypt_files(ctx: &Context, files: &[&ConfigFile]) {
 
         fs::remove_file(&file.src)
             .unwrap_or_else(|_| error!("Could not delete file source: {}", file.src.display()));
+
     }
+
+    Ok(())
 }
 
-fn begin_decrypt_files(ctx: &Context, files: &[&ConfigFile]) {
+fn begin_decrypt_files(ctx: &Context, files: &[&RawConfigFile]) {
     let mut identities = load_identities(&ctx.cli.identity);
     identities.extend(load_identities_from_values(&ctx.cli.identity_value));
 
@@ -221,8 +205,8 @@ fn begin_decrypt_files(ctx: &Context, files: &[&ConfigFile]) {
     }
 }
 
-pub fn encrypt(ctx: &Context, to_encrypt_files: &Option<Vec<PathBuf>>) -> Result<(), CmdError> {
-    let to_process_files: Vec<&ConfigFile> = match to_encrypt_files {
+pub fn encrypt(ctx: &mut Context, to_encrypt_files: &Option<Vec<PathBuf>>) -> Result<(), CmdError> {
+    let to_process_files: Vec<&RawConfigFile> = match to_encrypt_files {
         None => ctx.config.files.iter().collect(),
         Some(requested) => ctx
             .config
@@ -253,14 +237,14 @@ pub fn encrypt(ctx: &Context, to_encrypt_files: &Option<Vec<PathBuf>>) -> Result
         .prompt()
         .expect("Couldn't prompt to user")
     {
-        begin_encrypt_files(&ctx, &to_process_files)
+        begin_encrypt_files(&mut ctx, &to_process_files)?
     }
 
     Ok(())
 }
 
 pub fn decrypt(ctx: &Context, to_decrypt_files: &Option<Vec<PathBuf>>) -> Result<(), CmdError> {
-    let to_process_files: Vec<&ConfigFile> = match to_decrypt_files {
+    let to_process_files: Vec<&RawConfigFile> = match to_decrypt_files {
         None => ctx.config.files.iter().collect(),
         Some(requested) => ctx
             .config
