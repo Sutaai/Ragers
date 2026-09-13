@@ -2,7 +2,6 @@ use std::{
     fs,
     io::{Read, Write},
     path::{self, PathBuf},
-    rc::Rc,
 };
 
 use clap::{Parser, Subcommand};
@@ -11,7 +10,9 @@ use itertools::Itertools;
 use log::error;
 
 use crate::{
-    config::RawConfigFile, context::{Context, load_identities, load_identities_from_values}, error::{CmdError, RecipientsFactoryError},
+    config::RawConfigFile,
+    context::{Context, load_identities, load_identities_from_values},
+    error::{CmdError, RecipientsFactoryError},
 };
 
 #[derive(Parser)]
@@ -108,7 +109,10 @@ fn find_comparable_path<'a>(path: &PathBuf, list: &'a [PathBuf]) -> Option<&'a P
     None
 }
 
-fn begin_encrypt_files(ctx: &mut Context, files: &[&RawConfigFile]) -> Result<(), RecipientsFactoryError> {
+fn begin_encrypt_files(
+    ctx: &Context,
+    files: &[&RawConfigFile],
+) -> Result<(), RecipientsFactoryError> {
     for file in files {
         // Obtain recipients
         let age_recipients = ctx.recipients_factory.obtain_for_file(&file)?;
@@ -153,7 +157,6 @@ fn begin_encrypt_files(ctx: &mut Context, files: &[&RawConfigFile]) -> Result<()
 
         fs::remove_file(&file.src)
             .unwrap_or_else(|_| error!("Could not delete file source: {}", file.src.display()));
-
     }
 
     Ok(())
@@ -205,7 +208,7 @@ fn begin_decrypt_files(ctx: &Context, files: &[&RawConfigFile]) {
     }
 }
 
-pub fn encrypt(ctx: &mut Context, to_encrypt_files: &Option<Vec<PathBuf>>) -> Result<(), CmdError> {
+pub fn encrypt(ctx: &Context, to_encrypt_files: &Option<Vec<PathBuf>>) -> Result<(), CmdError> {
     let to_process_files: Vec<&RawConfigFile> = match to_encrypt_files {
         None => ctx.config.files.iter().collect(),
         Some(requested) => ctx
@@ -237,7 +240,7 @@ pub fn encrypt(ctx: &mut Context, to_encrypt_files: &Option<Vec<PathBuf>>) -> Re
         .prompt()
         .expect("Couldn't prompt to user")
     {
-        begin_encrypt_files(&mut ctx, &to_process_files)?
+        begin_encrypt_files(&ctx, &to_process_files)?
     }
 
     Ok(())

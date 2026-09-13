@@ -1,4 +1,5 @@
 use std::{
+    cell::RefCell,
     collections::{HashMap, HashSet},
     path::{Path, PathBuf},
     rc::Rc,
@@ -13,7 +14,7 @@ use crate::error::{
     ConfigError, ConfigValidationError, NotFound, RecipientParseError, RecipientsFactoryError,
 };
 
-/// Struct representation of the Ragers config file. Used for deserialization. 
+/// Struct representation of the Ragers config file. Used for deserialization.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RawConfig {
     /// A list of pre-defined recipients
@@ -23,7 +24,7 @@ pub struct RawConfig {
     pub files: Vec<RawConfigFile>,
 }
 
-/// Struct representation of recipients definition in the config file. Part of `RawConfig`.
+/// Struct representation of recipients definition in the config file. Part of [`RawConfig`].
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RawConfigRecipients {
     /// A list of recipients that may be used to encrypt and/or decrypt files
@@ -38,7 +39,7 @@ pub struct RawConfigRecipients {
 }
 
 /// Struct representation of files (to encrypt/decrypt) definition in the config file. Part of
-/// `RawConfig`.
+/// [`RawConfig`].
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RawConfigFile {
     /// The path of the unencrypted file source
@@ -53,8 +54,8 @@ pub struct RawConfigFile {
 }
 
 impl RawConfig {
-    /// Creates a new instance of `RawConfig` by reading the file at `config_path`.
-    /// 
+    /// Creates a new instance of [`RawConfig`] by reading the file at [`config_path`].
+    ///
     /// This function will read the path it is given and attempt to deserialize it through their
     /// structs representation.
     pub fn new(config_path: &Path) -> Result<Self, ConfigError> {
@@ -85,13 +86,13 @@ impl RawConfig {
 /// Type that must be returned by each validating functions in `ConfigValidator`.
 type ConfCheckResult = Result<(), ConfigValidationError>;
 
-/// Struct aiming to validate `RawConfig` values.
-/// 
-/// The `ConfigValidator` aims to validate a given `RawConfig` through the
-/// `ConfigValidator::validate` function to ensure the file is valid and will not prompt any error
+/// Struct aiming to validate [`RawConfig`] values.
+///
+/// The [`ConfigValidator`] aims to validate a given [`RawConfig`] through the
+/// [`ConfigValidator::validate.`] function to ensure the file is valid and will not prompt any error
 /// during the program's execution.
-/// 
-/// Thus, once validated, it should be safe to use `RawConfig` and references made in it should be
+///
+/// Thus, once validated, it should be safe to use [`RawConfig`] and references made in it should be
 /// safe.
 pub struct ConfigValidator;
 
@@ -116,8 +117,10 @@ impl ConfigValidator {
         }
 
         if all_errors.is_empty() {
+            log::trace!("Config passed validation");
             Ok(())
         } else {
+            log::debug!("Validation errors: {:?}", all_errors);
             Err(all_errors)
         }
     }
@@ -139,6 +142,7 @@ impl ConfigValidator {
             };
         }
 
+        log::trace!("Check complete");
         Ok(())
     }
 
@@ -156,6 +160,7 @@ impl ConfigValidator {
             }
         }
 
+        log::trace!("Check complete");
         Ok(())
     }
 
@@ -176,6 +181,7 @@ impl ConfigValidator {
             }
         }
 
+        log::trace!("Check complete");
         Ok(())
     }
 
@@ -196,6 +202,7 @@ impl ConfigValidator {
             }
         }
 
+        log::trace!("Check complete");
         Ok(())
     }
 
@@ -214,6 +221,7 @@ impl ConfigValidator {
             }
         }
 
+        log::trace!("Check complete");
         Ok(())
     }
 
@@ -232,18 +240,19 @@ impl ConfigValidator {
             }
         }
 
+        log::trace!("Check complete");
         Ok(())
     }
 
     fn check_files_valid_recipients(&self, config: &RawConfig) -> ConfCheckResult {
         log::trace!("Checking files recipients are valid");
 
-        let mut recipients_factory = RecipientsFactory::new(&config.recipients);
+        let recipients_factory = RecipientsFactory::new(&config.recipients);
 
         for (index, file) in config.files.iter().enumerate() {
             for unparsed_recipient in &file.recipients {
                 match recipients_factory.obtain_from_alias(unparsed_recipient) {
-                    Ok(_) => {},
+                    Ok(_) => {}
                     Err(_) => {
                         return Err(ConfigValidationError::FileAliasNotFound {
                             index,
@@ -251,8 +260,10 @@ impl ConfigValidator {
                         });
                     }
                 };
-            };
+            }
         }
+
+        log::trace!("Check complete");
         Ok(())
     }
 
@@ -271,6 +282,7 @@ impl ConfigValidator {
             }
         }
 
+        log::trace!("Check complete");
         Ok(())
     }
 }
@@ -281,7 +293,16 @@ pub(crate) enum RecipientParsed {
     SSH(age::ssh::Recipient),
 }
 
-/// Parse a raw string age recipient. Obtains the age recipient struct.
+impl From<RecipientParsed> for Rc<dyn age::Recipient> {
+    fn from(value: RecipientParsed) -> Self {
+        match value {
+            RecipientParsed::X25519(r) => Rc::new(r),
+            RecipientParsed::SSH(r) => Rc::new(r),
+        }
+    }
+}
+
+/// Parse a raw string age recipient. Obtains the corresponding age recipient struct.
 pub(crate) fn parse_age_recipient(
     age_key_str: &str,
 ) -> Result<RecipientParsed, RecipientParseError> {
@@ -349,10 +370,10 @@ fn read_recipients_file(file: &PathBuf) -> Result<Vec<String>, std::io::Error> {
     Ok(parsed_recipients)
 }
 
-/// The `RecipientsFactory` implement logic for looking up recipients and returning their
-/// according `age::Recipient` struct.
+/// The [`RecipientsFactory`] implement logic for looking up recipients and returning their
+/// according [`age::Recipient`] struct.
 ///
-/// `RecipientsFactory` is the entrypoint for managing recipients in all kind of ways throughout
+/// [`RecipientsFactory`] is the entrypoint for managing recipients in all kind of ways throughout
 /// the application's lifetime, mostly handling parsing and caching.
 ///
 /// Caching is done to avoid re-parsing a known recipient that has already been parsed.
@@ -362,57 +383,60 @@ fn read_recipients_file(file: &PathBuf) -> Result<Vec<String>, std::io::Error> {
 pub struct RecipientsFactory<'config> {
     /// Recipients part of the config file.
     config_recipients: &'config RawConfigRecipients,
-    /// Cache containing age recipients. Key: age recipient as string.
-    /// Value: struct age::Recipient
-    direct_recipients_cache: HashMap<String, Rc<dyn age::Recipient>>,
+    /// Cache containing age direct recipients. Key: age recipient as string.
+    /// Value: struct [`age::Recipient`]
+    age_recipients_cache: RefCell<HashMap<String, Rc<dyn age::Recipient>>>,
 }
 
 impl<'config> RecipientsFactory<'config> {
-    /// Return a new instance of `RecipientsFactory`.
+    /// Return a new instance of [`RecipientsFactory`].
     pub fn new(recipients: &'config RawConfigRecipients) -> Self {
         Self {
             config_recipients: recipients,
-            direct_recipients_cache: HashMap::new(),
+            age_recipients_cache: RefCell::new(HashMap::new()),
         }
     }
 
+    fn get_or_store_recipient(
+        &self,
+        age_recipient_str: &str,
+    ) -> Result<Rc<dyn age::Recipient>, RecipientParseError> {
+        let mut cache = self.age_recipients_cache.borrow_mut();
+
+        if !cache.contains_key(age_recipient_str) {
+            log::debug!("Recipient \"{age_recipient_str}\" is not cached, parsing");
+
+            let struct_recipient: Rc<dyn age::Recipient> =
+                parse_age_recipient(age_recipient_str)?.into();
+
+            cache.insert(age_recipient_str.to_owned(), struct_recipient);
+        }
+
+        log::trace!("Obtaining recipient struct for \"{age_recipient_str}\"");
+        let age_recipient = Rc::clone(cache.get(age_recipient_str).expect(&format!(
+            "expected {age_recipient_str} to exist in factory cache, but nothing was found"
+        )));
+
+        Ok(age_recipient)
+    }
+
     fn direct_recipient(
-        &mut self,
+        &self,
         config_key: &str,
-    ) -> Result<&Rc<dyn age::Recipient>, RecipientsFactoryError> {
+    ) -> Result<Rc<dyn age::Recipient>, RecipientsFactoryError> {
         let age_recipient_str = self
             .config_recipients
             .direct
             .get(config_key)
             .ok_or_else(|| NotFound(config_key.to_owned()))?;
 
-        if !self.direct_recipients_cache.contains_key(age_recipient_str) {
-            log::debug!("{age_recipient_str} is not cached, parsing");
-
-            let struct_recipient: Rc<dyn age::Recipient> =
-                match parse_age_recipient(age_recipient_str)? {
-                    RecipientParsed::X25519(recipient) => Rc::new(recipient),
-                    RecipientParsed::SSH(recipient) => Rc::new(recipient),
-                };
-
-            self.direct_recipients_cache
-                .insert(age_recipient_str.to_owned(), struct_recipient);
-        }
-
-        log::trace!("Fetching {age_recipient_str}");
-
-        let age_recipient = self
-            .direct_recipients_cache
-            .get(age_recipient_str)
-            .expect(&format!(
-                "expected {age_recipient_str} to exist in factory cache, but nothing was found"
-            ));
+        let age_recipient = self.get_or_store_recipient(age_recipient_str)?;
 
         Ok(age_recipient)
     }
 
     fn group(
-        &mut self,
+        &self,
         config_key: &str,
     ) -> Result<Vec<Rc<dyn age::Recipient>>, RecipientsFactoryError> {
         let mut parsed_recipients = vec![];
@@ -425,17 +449,17 @@ impl<'config> RecipientsFactory<'config> {
 
         for recipient_reference_key in group {
             let recipient = self.direct_recipient(recipient_reference_key)?;
-            parsed_recipients.push(Rc::clone(recipient));
+            parsed_recipients.push(recipient);
         }
 
         Ok(parsed_recipients)
     }
 
     fn file(
-        &mut self,
+        &self,
         config_key: &str,
     ) -> Result<Vec<Rc<dyn age::Recipient>>, RecipientsFactoryError> {
-        let mut parsed_recipients = vec![];
+        let mut parsed_recipients = Vec::new();
 
         let file_path = self
             .config_recipients
@@ -445,16 +469,16 @@ impl<'config> RecipientsFactory<'config> {
 
         let file_content = read_recipients_file(file_path)?;
 
-        for recipient_str in file_content {
-            let recipient = self.direct_recipient(&recipient_str)?;
-            parsed_recipients.push(Rc::clone(recipient));
+        for age_recipient_str in file_content {
+            let recipient = self.get_or_store_recipient(&age_recipient_str)?;
+            parsed_recipients.push(recipient);
         }
 
         Ok(parsed_recipients)
     }
 
     pub fn obtain_from_alias(
-        &mut self,
+        &self,
         alias: &str,
     ) -> Result<Vec<Rc<dyn age::Recipient>>, RecipientsFactoryError> {
         let recipients = match get_alias_kind(alias) {
@@ -462,7 +486,7 @@ impl<'config> RecipientsFactory<'config> {
             AliasKind::RecipientsFile(key) => self.file(&key)?,
             AliasKind::DirectRecipient(key) => {
                 let recipient = self.direct_recipient(&key)?;
-                vec![Rc::clone(recipient)]
+                vec![recipient]
             }
         };
 
@@ -470,7 +494,7 @@ impl<'config> RecipientsFactory<'config> {
     }
 
     pub fn obtain_for_file(
-        &mut self,
+        &self,
         config_file: &RawConfigFile,
     ) -> Result<Vec<Rc<dyn age::Recipient>>, RecipientsFactoryError> {
         let mut fetched_recipients = vec![];

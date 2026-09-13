@@ -81,7 +81,7 @@ pub enum RecipientsFactoryError {
     #[error(transparent)]
     RecipientParseError(#[from] RecipientParseError),
     #[error("IO error: {0}")]
-    Io(#[from] std::io::Error)
+    Io(#[from] std::io::Error),
 }
 
 #[derive(Error, Debug)]
@@ -93,5 +93,5 @@ pub enum CmdError {
     Validation(#[from] ConfigValidationError),
 
     #[error(transparent)]
-    RecipientsFactory(#[from] RecipientsFactoryError)
+    RecipientsFactory(#[from] RecipientsFactoryError),
 }

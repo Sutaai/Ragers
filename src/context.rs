@@ -9,14 +9,18 @@ use crate::error::CmdError;
 pub struct Context<'config> {
     pub cli: Cli,
     pub config: &'config RawConfig,
-    pub recipients_factory: RecipientsFactory<'config>
+    pub recipients_factory: RecipientsFactory<'config>,
 }
 
 impl<'config> Context<'config> {
     pub fn new(cli: Cli, config: &'config RawConfig) -> Result<Self, CmdError> {
         let recipients_factory = RecipientsFactory::new(&config.recipients);
 
-        Ok(Self { cli, config, recipients_factory })
+        Ok(Self {
+            cli,
+            config,
+            recipients_factory,
+        })
     }
 }
 

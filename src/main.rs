@@ -3,7 +3,9 @@ use env_logger::fmt::style;
 use std::io::Write;
 
 use crate::{
-    cli::{Cli, decrypt, encrypt}, config::RawConfig, error::CmdError,
+    cli::{Cli, decrypt, encrypt},
+    config::RawConfig,
+    error::CmdError,
 };
 
 mod cli;
@@ -49,17 +51,21 @@ fn setup_logger(level: &log::LevelFilter) {
                 .effects(style::Effects::ITALIC);
             writeln!(
                 buf,
-                "{} ({mod_style}{}{mod_style:#}): {}",
+                "{} ({mod_style}{}{mod_style:#}{}): {}",
                 level_str,
                 record.metadata().target(),
+                record
+                    .line()
+                    .map(|line| format!(" [{line}]"))
+                    .unwrap_or_else(|| "".into()),
                 record.args()
             )
         })
         .init();
 }
 
-fn handle_cmd_error(_err: CmdError) {
-    unimplemented!()
+fn handle_cmd_error(err: CmdError) {
+    log::error!("{}", err)
 }
 
 fn main() {
@@ -74,7 +80,7 @@ fn main() {
 
 fn wrap_execution(cli: Cli) -> Result<(), CmdError> {
     let config = RawConfig::new(&cli.config_path)?;
-    let mut ctx = context::Context::new(cli, &config)?;
+    let ctx = context::Context::new(cli, &config)?;
 
     match &ctx.cli.command {
         Some(cli::Commands::Encrypt { files }) => encrypt(&ctx, &files)?,
