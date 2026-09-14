@@ -1,7 +1,5 @@
 use std::path::PathBuf;
 
-use log::warn;
-
 use crate::cli::Cli;
 use crate::config::{RawConfig, RecipientsFactory};
 use crate::error::CmdError;
@@ -40,13 +38,15 @@ pub fn load_identities_from_values(raw_identities: &[String]) -> Vec<Box<dyn age
             Ok(identity_file) => {
                 let parsed = identity_file
                     .into_identities()
-                    .expect(&format!("could not parse age identities from {label}"));
+                    .unwrap_or_else(|_| {
+                        panic!("could not parse age identities from {label}")
+                    });
                 identities.extend(parsed);
             }
             Err(_) => {
                 match age::ssh::Identity::from_buffer(value.as_bytes(), Some(label.clone())) {
                     Ok(age::ssh::Identity::Unsupported(_)) => {
-                        warn!("{label} contains an unsupported SSH key type, ignoring");
+                        log::warn!("{label} contains an unsupported SSH key type, ignoring");
                     }
                     Ok(identity) => identities.push(Box::new(identity)),
                     Err(err) => {
@@ -66,24 +66,28 @@ pub fn load_identities(identities_paths: &[PathBuf]) -> Vec<Box<dyn age::Identit
     for path in identities_paths {
         match age::IdentityFile::from_file(path.to_string_lossy().into_owned()) {
             Ok(identity_file) => {
-                let parsed = identity_file.into_identities().expect(&format!(
-                    "could not parse age identities from file \"{}\"",
-                    path.display()
-                ));
+                let parsed = identity_file.into_identities().unwrap_or_else(|_| {
+                    panic!(
+                        "could not parse age identities from file \"{}\"",
+                        path.display()
+                    )
+                });
                 identities.extend(parsed);
             }
             Err(_) => {
-                let content = std::fs::read_to_string(path).expect(&format!(
-                    "could not read identity file \"{}\"",
-                    path.display()
-                ));
+                let content = std::fs::read_to_string(path).unwrap_or_else(|_| {
+                    panic!(
+                        "could not read identity file \"{}\"",
+                        path.display()
+                    )
+                });
 
                 match age::ssh::Identity::from_buffer(
                     content.as_bytes(),
                     Some(path.display().to_string()),
                 ) {
                     Ok(age::ssh::Identity::Unsupported(_)) => {
-                        warn!(
+                        log::warn!(
                             "identity file \"{}\" contains an unsupported SSH key type, ignoring",
                             path.display()
                         );

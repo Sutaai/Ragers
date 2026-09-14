@@ -7,7 +7,6 @@ use std::{
 use clap::{Parser, Subcommand};
 use inquire::Confirm;
 use itertools::Itertools;
-use log::error;
 
 use crate::{
     config::RawConfigFile,
@@ -99,11 +98,10 @@ fn find_comparable_path<'a>(path: &PathBuf, list: &'a [PathBuf]) -> Option<&'a P
     let full_path = path::absolute(path).expect("could not convert path to absolute path");
 
     for listed_path in list {
-        if let Ok(compare_path) = std::path::absolute(listed_path) {
-            if full_path == compare_path {
+        if let Ok(compare_path) = std::path::absolute(listed_path)
+            && full_path == compare_path {
                 return Some(listed_path);
             }
-        }
     }
 
     None
@@ -115,13 +113,13 @@ fn begin_encrypt_files(
 ) -> Result<(), RecipientsFactoryError> {
     for file in files {
         // Obtain recipients
-        let age_recipients = ctx.recipients_factory.obtain_for_file(&file)?;
+        let age_recipients = ctx.recipients_factory.obtain_for_file(file)?;
 
         let recipient_refs: Vec<&dyn age::Recipient> =
             age_recipients.iter().map(|r| r.as_ref()).collect();
 
         // Configure age's encryptor
-        let encryptor: age::Encryptor = age::Encryptor::with_recipients(recipient_refs.into_iter())
+        let encryptor = age::Encryptor::with_recipients(recipient_refs.into_iter())
             .expect("expected encryptor to accept recipients");
         let format: age::armor::Format = if file.armor {
             age::armor::Format::AsciiArmor
@@ -129,12 +127,12 @@ fn begin_encrypt_files(
             age::armor::Format::Binary
         };
 
-        let plaintext = std::fs::read(&file.src).expect(&format!(
+        let plaintext = std::fs::read(&file.src).unwrap_or_else(|_| panic!(
             "could not read source file \"{}\"",
             file.src.display()
         ));
 
-        let output = std::fs::File::create(&file.out).expect(&format!(
+        let output = std::fs::File::create(&file.out).unwrap_or_else(|_| panic!(
             "could not create output file \"{}\"",
             file.out.display()
         ));
@@ -156,7 +154,7 @@ fn begin_encrypt_files(
             .expect("could not finish encryption");
 
         fs::remove_file(&file.src)
-            .unwrap_or_else(|_| error!("Could not delete file source: {}", file.src.display()));
+            .unwrap_or_else(|_| log::error!("Could not delete file source: {}", file.src.display()));
     }
 
     Ok(())
@@ -169,7 +167,7 @@ fn begin_decrypt_files(ctx: &Context, files: &[&RawConfigFile]) {
     let identity_refs: Vec<&dyn age::Identity> = identities.iter().map(|i| i.as_ref()).collect();
 
     for file in files {
-        let encrypted = std::fs::File::open(&file.out).expect(&format!(
+        let encrypted = std::fs::File::open(&file.out).unwrap_or_else(|_| panic!(
             "could not open encrypted file \"{}\"",
             file.out.display()
         ));
@@ -177,30 +175,34 @@ fn begin_decrypt_files(ctx: &Context, files: &[&RawConfigFile]) {
         // ArmoredReader auto-detects whether the input is ASCII-armored or binary.
         let armored_reader = age::armor::ArmoredReader::new(encrypted);
 
-        let decryptor = age::Decryptor::new_buffered(armored_reader).expect(&format!(
+        let decryptor = age::Decryptor::new_buffered(armored_reader).unwrap_or_else(|_| panic!(
             "could not read age header from \"{}\", is it a valid age file?",
             file.out.display()
         ));
 
         let mut reader = decryptor
             .decrypt(identity_refs.iter().copied())
-            .expect(&format!(
-                "could not decrypt \"{}\" with the provided identities",
-                file.out.display()
-            ));
+            .unwrap_or_else(|_| {
+                panic!(
+                    "could not decrypt \"{}\" with the provided identities",
+                    file.out.display()
+                )
+            });
 
         let mut plaintext = Vec::new();
         reader
             .read_to_end(&mut plaintext)
             .expect("could not read decrypted contents");
 
-        std::fs::write(&file.src, &plaintext).expect(&format!(
-            "could not write decrypted file to \"{}\"",
-            file.src.display()
-        ));
+        std::fs::write(&file.src, &plaintext).unwrap_or_else(|_| {
+            panic!(
+                "could not write decrypted file to \"{}\"",
+                file.src.display()
+            )
+        });
 
         fs::remove_file(&file.out).unwrap_or_else(|_| {
-            error!(
+            log::error!(
                 "Could not delete encrypted file source: {}",
                 file.src.display()
             )
@@ -220,7 +222,7 @@ pub fn encrypt(ctx: &Context, to_encrypt_files: &Option<Vec<PathBuf>>) -> Result
     };
 
     if to_process_files.is_empty() {
-        println!("There are no files to encrypt.");
+        log::warn!("There are no files to encrypt.");
         return Ok(());
     }
 
@@ -231,7 +233,7 @@ pub fn encrypt(ctx: &Context, to_encrypt_files: &Option<Vec<PathBuf>>) -> Result
 
     let confirm_str = format!(
         "There are {} files to encrypt:\n{}\nProceed with encryption?",
-        &to_process_files.len(),
+        to_process_files.len(),
         files_as_str_list
     );
 
@@ -240,7 +242,7 @@ pub fn encrypt(ctx: &Context, to_encrypt_files: &Option<Vec<PathBuf>>) -> Result
         .prompt()
         .expect("Couldn't prompt to user")
     {
-        begin_encrypt_files(&ctx, &to_process_files)?
+        begin_encrypt_files(ctx, &to_process_files)?
     }
 
     Ok(())
@@ -276,7 +278,7 @@ pub fn decrypt(ctx: &Context, to_decrypt_files: &Option<Vec<PathBuf>>) -> Result
 
     let confirm_str = format!(
         "There are {} files to decrypt:\n{}\nProceed with decryption?",
-        &to_process_files.len(),
+        to_process_files.len(),
         files_as_str_list
     );
 
@@ -285,7 +287,7 @@ pub fn decrypt(ctx: &Context, to_decrypt_files: &Option<Vec<PathBuf>>) -> Result
         .prompt()
         .expect("Couldn't prompt to user")
     {
-        begin_decrypt_files(&ctx, &to_process_files)
+        begin_decrypt_files(ctx, &to_process_files)
     }
 
     Ok(())

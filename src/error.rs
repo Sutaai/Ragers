@@ -7,12 +7,12 @@ pub enum RecipientParseError {
     #[error("Invalid recipient")]
     Invalid,
     #[error("SSH recipient parse error")]
-    SSH(age::ssh::ParseRecipientKeyError),
+    Ssh(age::ssh::ParseRecipientKeyError),
 }
 
 impl From<age::ssh::ParseRecipientKeyError> for RecipientParseError {
     fn from(value: age::ssh::ParseRecipientKeyError) -> Self {
-        Self::SSH(value)
+        Self::Ssh(value)
     }
 }
 

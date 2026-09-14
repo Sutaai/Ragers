@@ -83,8 +83,8 @@ fn wrap_execution(cli: Cli) -> Result<(), CmdError> {
     let ctx = context::Context::new(cli, &config)?;
 
     match &ctx.cli.command {
-        Some(cli::Commands::Encrypt { files }) => encrypt(&ctx, &files)?,
-        Some(cli::Commands::Decrypt { files }) => decrypt(&ctx, &files)?,
+        Some(cli::Commands::Encrypt { files }) => encrypt(&ctx, files)?,
+        Some(cli::Commands::Decrypt { files }) => decrypt(&ctx, files)?,
         None => {
             Cli::command().print_help().unwrap();
         }
