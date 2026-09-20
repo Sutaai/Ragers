@@ -3,20 +3,6 @@ use std::path::PathBuf;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub enum RecipientParseError {
-    #[error("Invalid recipient")]
-    Invalid,
-    #[error("SSH recipient parse error")]
-    Ssh(age::ssh::ParseRecipientKeyError),
-}
-
-impl From<age::ssh::ParseRecipientKeyError> for RecipientParseError {
-    fn from(value: age::ssh::ParseRecipientKeyError) -> Self {
-        Self::Ssh(value)
-    }
-}
-
-#[derive(Error, Debug)]
 #[error("Item not found: {0}")]
 pub struct NotFound(pub String);
 
@@ -39,7 +25,7 @@ pub enum ConfigValidationError {
     InvalidRecipient {
         key: String,
         #[source]
-        parse_error: RecipientParseError,
+        parse_error: age::cli_common::ReadError,
     },
     #[error(
         "Duplicated recipient:
@@ -79,7 +65,7 @@ pub enum RecipientsFactoryError {
     #[error(transparent)]
     NotFound(#[from] NotFound),
     #[error(transparent)]
-    RecipientParseError(#[from] RecipientParseError),
+    RecipientParseError(#[from] age::cli_common::ReadError),
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 }

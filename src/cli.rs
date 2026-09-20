@@ -99,9 +99,10 @@ fn find_comparable_path<'a>(path: &PathBuf, list: &'a [PathBuf]) -> Option<&'a P
 
     for listed_path in list {
         if let Ok(compare_path) = std::path::absolute(listed_path)
-            && full_path == compare_path {
-                return Some(listed_path);
-            }
+            && full_path == compare_path
+        {
+            return Some(listed_path);
+        }
     }
 
     None
@@ -111,9 +112,11 @@ fn begin_encrypt_files(
     ctx: &Context,
     files: &[&RawConfigFile],
 ) -> Result<(), RecipientsFactoryError> {
+    let mut stdin_guard = ctx.stdin_guard.borrow_mut();
+
     for file in files {
         // Obtain recipients
-        let age_recipients = ctx.recipients_factory.obtain_for_file(file)?;
+        let age_recipients = ctx.recipients_factory.obtain_for_file(file, &mut stdin_guard)?;
 
         let recipient_refs: Vec<&dyn age::Recipient> =
             age_recipients.iter().map(|r| r.as_ref()).collect();
@@ -127,15 +130,11 @@ fn begin_encrypt_files(
             age::armor::Format::Binary
         };
 
-        let plaintext = std::fs::read(&file.src).unwrap_or_else(|_| panic!(
-            "could not read source file \"{}\"",
-            file.src.display()
-        ));
+        let plaintext = std::fs::read(&file.src)
+            .unwrap_or_else(|_| panic!("could not read source file \"{}\"", file.src.display()));
 
-        let output = std::fs::File::create(&file.out).unwrap_or_else(|_| panic!(
-            "could not create output file \"{}\"",
-            file.out.display()
-        ));
+        let output = std::fs::File::create(&file.out)
+            .unwrap_or_else(|_| panic!("could not create output file \"{}\"", file.out.display()));
 
         let armored_output = age::armor::ArmoredWriter::wrap_output(output, format)
             .expect("could not wrap output writer");
@@ -153,8 +152,9 @@ fn begin_encrypt_files(
             .and_then(|armor| armor.finish())
             .expect("could not finish encryption");
 
-        fs::remove_file(&file.src)
-            .unwrap_or_else(|_| log::error!("Could not delete file source: {}", file.src.display()));
+        fs::remove_file(&file.src).unwrap_or_else(|_| {
+            log::error!("Could not delete file source: {}", file.src.display())
+        });
     }
 
     Ok(())
@@ -167,30 +167,32 @@ fn begin_decrypt_files(ctx: &Context, files: &[&RawConfigFile]) {
     let identity_refs: Vec<&dyn age::Identity> = identities.iter().map(|i| i.as_ref()).collect();
 
     for file in files {
-        let encrypted = std::fs::File::open(&file.out).unwrap_or_else(|_| panic!(
-            "could not open encrypted file \"{}\"",
-            file.out.display()
-        ));
+        let encrypted = std::fs::File::open(&file.out)
+            .unwrap_or_else(|_| panic!("could not open encrypted file \"{}\"", file.out.display()));
 
         // ArmoredReader auto-detects whether the input is ASCII-armored or binary.
         let armored_reader = age::armor::ArmoredReader::new(encrypted);
 
-        let decryptor = age::Decryptor::new_buffered(armored_reader).unwrap_or_else(|_| panic!(
-            "could not read age header from \"{}\", is it a valid age file?",
-            file.out.display()
-        ));
+        let decryptor = age::Decryptor::new_buffered(armored_reader).unwrap_or_else(|_| {
+            panic!(
+                "could not read age header from \"{}\", is it a valid age file?",
+                file.out.display()
+            )
+        });
 
-        let mut reader = decryptor
+        let reader = decryptor
             .decrypt(identity_refs.iter().copied())
-            .unwrap_or_else(|_| {
-                panic!(
-                    "could not decrypt \"{}\" with the provided identities",
-                    file.out.display()
-                )
+            .map_err(|t| {
+                log::error!("Unable to decrypt {}: {}", file.out.display(), t.to_string());
             });
 
+        let mut reader_result = match reader {
+            Ok(res) => {res},
+            Err(_) => {continue}
+        };
+
         let mut plaintext = Vec::new();
-        reader
+        reader_result
             .read_to_end(&mut plaintext)
             .expect("could not read decrypted contents");
 

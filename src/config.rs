@@ -2,15 +2,17 @@ use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
     path::{Path, PathBuf},
-    rc::Rc,
-    str::FromStr,
+    rc::Rc
 };
 
+use age::cli_common::read_recipients;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::error::{
-    ConfigError, ConfigValidationError, NotFound, RecipientParseError, RecipientsFactoryError,
+use crate::{
+    error::{
+        ConfigError, ConfigValidationError, NotFound, RecipientsFactoryError,
+    },
 };
 
 /// Struct representation of the Ragers config file. Used for deserialization.
@@ -128,10 +130,12 @@ impl ConfigValidator {
     fn check_recipients_age_valid(&self, config: &RawConfig) -> ConfCheckResult {
         log::trace!("Checking if all recipients are valid");
 
+        let mut fake_guard = age::cli_common::StdinGuard::new(false);
         let recipients = &config.recipients.direct;
+        let recipients_factory = RecipientsFactory::new(&config.recipients);
 
         for (alias, raw_recipient) in recipients {
-            match parse_age_recipient(raw_recipient) {
+            match recipients_factory.get_or_store_recipient(raw_recipient, &mut fake_guard) {
                 Ok(_) => {}
                 Err(err) => {
                     return Err(ConfigValidationError::InvalidRecipient {
@@ -248,10 +252,11 @@ impl ConfigValidator {
         log::trace!("Checking files recipients are valid");
 
         let recipients_factory = RecipientsFactory::new(&config.recipients);
+        let mut fake_guard = age::cli_common::StdinGuard::new(false);
 
         for (index, file) in config.files.iter().enumerate() {
             for unparsed_recipient in &file.recipients {
-                match recipients_factory.obtain_for_alias(unparsed_recipient) {
+                match recipients_factory.obtain_for_alias(unparsed_recipient, &mut fake_guard) {
                     Ok(_) => {}
                     Err(_) => {
                         return Err(ConfigValidationError::FileAliasNotFound {
@@ -285,48 +290,6 @@ impl ConfigValidator {
         log::trace!("Check complete");
         Ok(())
     }
-}
-
-/// Enum of parsed age recipients. Supported recipients only.
-pub(crate) enum RecipientParsed {
-    X25519(age::x25519::Recipient),
-    Ssh(age::ssh::Recipient),
-}
-
-impl From<RecipientParsed> for Rc<dyn age::Recipient> {
-    fn from(value: RecipientParsed) -> Self {
-        match value {
-            RecipientParsed::X25519(r) => Rc::new(r),
-            RecipientParsed::Ssh(r) => Rc::new(r),
-        }
-    }
-}
-
-/// Parse a raw string age recipient. Obtains the corresponding age recipient struct.
-pub(crate) fn parse_age_recipient(
-    age_key_str: &str,
-) -> Result<RecipientParsed, RecipientParseError> {
-    if let Ok(recipient) = age::x25519::Recipient::from_str(age_key_str) {
-        return Ok(RecipientParsed::X25519(recipient));
-    };
-
-    match age_key_str.parse::<age::ssh::Recipient>() {
-        Ok(key) => return Ok(RecipientParsed::Ssh(key)),
-        Err(age::ssh::ParseRecipientKeyError::Ignore) => {
-            log::info!("SSH key has been ignored");
-            // I wonder what we should do here...
-        }
-        Err(age::ssh::ParseRecipientKeyError::Invalid(_)) => {
-            log::debug!("SSH key was invalid, ignored (Would have raised error)");
-            // Silently ignore
-        }
-        Err(err) => {
-            return Err(RecipientParseError::Ssh(err));
-        }
-    }
-
-    log::debug!("Did not match any key format");
-    Err(RecipientParseError::Invalid)
 }
 
 /// Indicate what kind of alias this is refering to.
@@ -400,23 +363,25 @@ impl<'config> RecipientsFactory<'config> {
     fn get_or_store_recipient(
         &self,
         age_recipient_str: &str,
-    ) -> Result<Rc<dyn age::Recipient>, RecipientParseError> {
+        stdin_guard: &mut age::cli_common::StdinGuard,
+    ) -> Result<Rc<dyn age::Recipient>, age::cli_common::ReadError> {
         let mut cache = self.age_recipients_cache.borrow_mut();
 
         if !cache.contains_key(age_recipient_str) {
             log::debug!("Recipient \"{age_recipient_str}\" is not cached, parsing");
 
-            let struct_recipient: Rc<dyn age::Recipient> =
-                parse_age_recipient(age_recipient_str)?.into();
+            let parsed_recipient =
+                read_recipients(vec![age_recipient_str.to_owned()], vec![], vec![], None, stdin_guard)
+                    .unwrap()
+                    .remove(0);
+            let rc_recipient: Rc<dyn age::Recipient + Send> = Rc::from(parsed_recipient);
 
-            cache.insert(age_recipient_str.to_owned(), struct_recipient);
+            cache.insert(age_recipient_str.to_owned(), rc_recipient);
         }
 
         log::trace!("Obtaining recipient struct for \"{age_recipient_str}\"");
         let age_recipient = Rc::clone(cache.get(age_recipient_str).unwrap_or_else(|| {
-            panic!(
-                "expected {age_recipient_str} to exist in factory cache, but nothing was found"
-            )
+            panic!("expected {age_recipient_str} to exist in factory cache, but nothing was found")
         }));
 
         Ok(age_recipient)
@@ -425,6 +390,7 @@ impl<'config> RecipientsFactory<'config> {
     fn direct_recipient(
         &self,
         config_key: &str,
+        stdin_guard: &mut age::cli_common::StdinGuard,
     ) -> Result<Rc<dyn age::Recipient>, RecipientsFactoryError> {
         let age_recipient_str = self
             .config_recipients
@@ -432,7 +398,7 @@ impl<'config> RecipientsFactory<'config> {
             .get(config_key)
             .ok_or_else(|| NotFound(config_key.to_owned()))?;
 
-        let age_recipient = self.get_or_store_recipient(age_recipient_str)?;
+        let age_recipient = self.get_or_store_recipient(age_recipient_str, stdin_guard)?;
 
         Ok(age_recipient)
     }
@@ -440,6 +406,7 @@ impl<'config> RecipientsFactory<'config> {
     fn group(
         &self,
         config_key: &str,
+        stdin_guard: &mut age::cli_common::StdinGuard,
     ) -> Result<Vec<Rc<dyn age::Recipient>>, RecipientsFactoryError> {
         let mut parsed_recipients = Vec::new();
 
@@ -450,7 +417,7 @@ impl<'config> RecipientsFactory<'config> {
             .ok_or_else(|| NotFound(config_key.to_owned()))?;
 
         for recipient_reference_key in group {
-            let recipient = self.direct_recipient(recipient_reference_key)?;
+            let recipient = self.direct_recipient(recipient_reference_key, stdin_guard)?;
             parsed_recipients.push(recipient);
         }
 
@@ -460,6 +427,7 @@ impl<'config> RecipientsFactory<'config> {
     fn file(
         &self,
         config_key: &str,
+        stdin_guard: &mut age::cli_common::StdinGuard,
     ) -> Result<Vec<Rc<dyn age::Recipient>>, RecipientsFactoryError> {
         let mut parsed_recipients = Vec::new();
 
@@ -471,8 +439,8 @@ impl<'config> RecipientsFactory<'config> {
 
         let file_content = read_recipients_file(file_path)?;
 
-        for age_recipient_str in file_content {
-            let recipient = self.get_or_store_recipient(&age_recipient_str)?;
+        for age_recipient_str in &file_content {
+            let recipient = self.get_or_store_recipient(age_recipient_str, stdin_guard)?;
             parsed_recipients.push(recipient);
         }
 
@@ -482,12 +450,13 @@ impl<'config> RecipientsFactory<'config> {
     pub fn obtain_for_alias(
         &self,
         alias: &str,
+        stdin_guard: &mut age::cli_common::StdinGuard,
     ) -> Result<Vec<Rc<dyn age::Recipient>>, RecipientsFactoryError> {
         let recipients = match get_alias_kind(alias) {
-            AliasKind::Group(key) => self.group(&key)?,
-            AliasKind::RecipientsFile(key) => self.file(&key)?,
+            AliasKind::Group(key) => self.group(&key, stdin_guard)?,
+            AliasKind::RecipientsFile(key) => self.file(&key, stdin_guard)?,
             AliasKind::DirectRecipient(key) => {
-                let recipient = self.direct_recipient(&key)?;
+                let recipient = self.direct_recipient(&key, stdin_guard)?;
                 vec![recipient]
             }
         };
@@ -498,11 +467,12 @@ impl<'config> RecipientsFactory<'config> {
     pub fn obtain_for_file(
         &self,
         config_file: &RawConfigFile,
+        stdin_guard: &mut age::cli_common::StdinGuard,
     ) -> Result<Vec<Rc<dyn age::Recipient>>, RecipientsFactoryError> {
         let mut fetched_recipients = Vec::new();
 
         for alias in &config_file.recipients {
-            let recipients = self.obtain_for_alias(alias)?;
+            let recipients = self.obtain_for_alias(alias, stdin_guard)?;
             fetched_recipients.extend(recipients);
         }
 
@@ -511,7 +481,7 @@ impl<'config> RecipientsFactory<'config> {
 }
 
 pub struct IdentitiesFactory {
-    identities_cache: RefCell<HashMap<String, Box<dyn age::Identity>>>
+    identities_cache: RefCell<HashMap<String, Box<dyn age::Identity>>>,
 }
 
 impl IdentitiesFactory {

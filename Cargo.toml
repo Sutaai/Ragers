@@ -13,7 +13,7 @@ license = "MIT"
 publish = false
 
 [dependencies]
-age = { version = "0.11.3", features = ["armor", "ssh"] }
+age = { version = "0.11.3", features = ["armor", "cli-common", "ssh"] }
 clap = { version = "4.6.1", features = ["cargo", "derive", "env"] }
 config = { version = "0.15.25", features = ["yaml"] }
 env_logger = { version = "0.11.11", features = ["color", "kv"] }

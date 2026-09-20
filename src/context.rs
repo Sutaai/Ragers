@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::path::PathBuf;
 
 use crate::cli::Cli;
@@ -8,6 +9,7 @@ pub struct Context<'config> {
     pub cli: Cli,
     pub config: &'config RawConfig,
     pub recipients_factory: RecipientsFactory<'config>,
+    pub stdin_guard: RefCell<age::cli_common::StdinGuard>,
 }
 
 impl<'config> Context<'config> {
@@ -18,6 +20,7 @@ impl<'config> Context<'config> {
             cli,
             config,
             recipients_factory,
+            stdin_guard: RefCell::new(age::cli_common::StdinGuard::new(false)),
         })
     }
 }
@@ -38,9 +41,7 @@ pub fn load_identities_from_values(raw_identities: &[String]) -> Vec<Box<dyn age
             Ok(identity_file) => {
                 let parsed = identity_file
                     .into_identities()
-                    .unwrap_or_else(|_| {
-                        panic!("could not parse age identities from {label}")
-                    });
+                    .unwrap_or_else(|_| panic!("could not parse age identities from {label}"));
                 identities.extend(parsed);
             }
             Err(_) => {
@@ -76,10 +77,7 @@ pub fn load_identities(identities_paths: &[PathBuf]) -> Vec<Box<dyn age::Identit
             }
             Err(_) => {
                 let content = std::fs::read_to_string(path).unwrap_or_else(|_| {
-                    panic!(
-                        "could not read identity file \"{}\"",
-                        path.display()
-                    )
+                    panic!("could not read identity file \"{}\"", path.display())
                 });
 
                 match age::ssh::Identity::from_buffer(
