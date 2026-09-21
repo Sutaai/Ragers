@@ -10,7 +10,7 @@ use itertools::Itertools;
 
 use crate::{
     config::RawConfigFile,
-    context::{Context, load_identities, load_identities_from_values},
+    context::Context,
     error::{CmdError, RecipientsFactoryError},
 };
 
@@ -46,26 +46,27 @@ pub struct Cli {
 
     #[arg(
         short = 'I',
-        long,
+        long = "identity-file",
         action = clap::ArgAction::Append,
-        env = "RAGERS_IDENTITY_FILE",
-        help = "Path to an identity file used to decrypt files. May be repeated.",
+        env = "RAGERS_IDENTITIES_FILE",
+        default_value = ".identity",
+        help = "Paths to one or multiple identities file used to decrypt files. Repeat to use multiple.",
         value_hint = clap::ValueHint::FilePath,
         value_parser = clap::value_parser!(PathBuf),
         long_help = "Path to a file containing one or more private keys (age identities, or a single SSH private key) used to decrypt files. This flag may be repeated to supply multiple identities; all of them will be tried against every encrypted file."
     )]
-    pub identity: Vec<PathBuf>,
+    pub identities_file: Vec<PathBuf>,
 
-    #[arg(
-        short = 'i',
-        long,
-        action = clap::ArgAction::Append,
-        env = "RAGERS_IDENTITY",
-        help = "Raw identity (private key) value used to decrypt files, provided directly instead of via a file. May be repeated.",
-        long_help = "Raw identity (private key) value, provided directly instead of via a file. This may be an age identity (an 'AGE-SECRET-KEY-1...' value, optionally with several such values on separate lines), or a single SSH private key. This flag may be repeated to supply multiple identities; all of them will be tried against every encrypted file. When set through its environment variable, only a single occurrence is read, but that value may itself contain multiple newline-separated age identities."
-    )]
-    pub identity_value: Vec<String>,
-
+    // Note: This is probably to be removed
+    // #[arg(
+    //     short = 'i',
+    //     long,
+    //     action = clap::ArgAction::Append,
+    //     env = "RAGERS_IDENTITY",
+    //     help = "Raw identity (private key) value used to decrypt files, provided directly instead of via a file. May be repeated.",
+    //     long_help = "Raw identity (private key) value, provided directly instead of via a file. This may be an age identity (an 'AGE-SECRET-KEY-1...' value, optionally with several such values on separate lines), or a single SSH private key. This flag may be repeated to supply multiple identities; all of them will be tried against every encrypted file. When set through its environment variable, only a single occurrence is read, but that value may itself contain multiple newline-separated age identities."
+    // )]
+    // pub identity_value: Vec<String>,
     #[command(subcommand)]
     pub command: Option<Commands>,
 }
@@ -116,7 +117,9 @@ fn begin_encrypt_files(
 
     for file in files {
         // Obtain recipients
-        let age_recipients = ctx.recipients_factory.obtain_for_file(file, &mut stdin_guard)?;
+        let age_recipients = ctx
+            .recipients_factory
+            .obtain_for_file(file, &mut stdin_guard)?;
 
         let recipient_refs: Vec<&dyn age::Recipient> =
             age_recipients.iter().map(|r| r.as_ref()).collect();
@@ -160,11 +163,9 @@ fn begin_encrypt_files(
     Ok(())
 }
 
-fn begin_decrypt_files(ctx: &Context, files: &[&RawConfigFile]) {
-    let mut identities = load_identities(&ctx.cli.identity);
-    identities.extend(load_identities_from_values(&ctx.cli.identity_value));
-
-    let identity_refs: Vec<&dyn age::Identity> = identities.iter().map(|i| i.as_ref()).collect();
+fn begin_decrypt_files(ctx: &Context, files: &[&RawConfigFile]) -> Result<(), CmdError> {
+    let identities_struct = ctx.get_identities()?;
+    let identity_refs: Vec<&dyn age::Identity> = identities_struct.iter().map(|i| i.as_ref()).collect();
 
     for file in files {
         let encrypted = std::fs::File::open(&file.out)
@@ -183,12 +184,16 @@ fn begin_decrypt_files(ctx: &Context, files: &[&RawConfigFile]) {
         let reader = decryptor
             .decrypt(identity_refs.iter().copied())
             .map_err(|t| {
-                log::error!("Unable to decrypt {}: {}", file.out.display(), t.to_string());
+                log::error!(
+                    "Unable to decrypt {}: {}",
+                    file.out.display(),
+                    t.to_string()
+                );
             });
 
         let mut reader_result = match reader {
-            Ok(res) => {res},
-            Err(_) => {continue}
+            Ok(res) => res,
+            Err(_) => continue,
         };
 
         let mut plaintext = Vec::new();
@@ -210,6 +215,8 @@ fn begin_decrypt_files(ctx: &Context, files: &[&RawConfigFile]) {
             )
         });
     }
+
+    Ok(())
 }
 
 pub fn encrypt(ctx: &Context, to_encrypt_files: &Option<Vec<PathBuf>>) -> Result<(), CmdError> {
@@ -266,9 +273,9 @@ pub fn decrypt(ctx: &Context, to_decrypt_files: &Option<Vec<PathBuf>>) -> Result
         return Ok(());
     }
 
-    if ctx.cli.identity.is_empty() && ctx.cli.identity_value.is_empty() {
+    if ctx.cli.identities_file.is_empty() {
         println!(
-            "No identity provided. Use --identity-file or --identity to supply decrypting identity."
+            "No identity provided. Use --identity-file to supply decrypting identity."
         );
         return Ok(());
     }
@@ -289,7 +296,7 @@ pub fn decrypt(ctx: &Context, to_decrypt_files: &Option<Vec<PathBuf>>) -> Result
         .prompt()
         .expect("Couldn't prompt to user")
     {
-        begin_decrypt_files(ctx, &to_process_files)
+        begin_decrypt_files(ctx, &to_process_files)?
     }
 
     Ok(())

@@ -75,6 +75,9 @@ pub enum CmdError {
     #[error(transparent)]
     Config(#[from] ConfigError),
 
+    #[error("Could not parse recipient or identity: {0}")]
+    AgeReadError(#[from] age::cli_common::ReadError),
+
     #[error("Config validation error: {0}")]
     Validation(#[from] ConfigValidationError),
 

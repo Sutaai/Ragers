@@ -2,18 +2,14 @@ use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
     path::{Path, PathBuf},
-    rc::Rc
+    rc::Rc,
 };
 
 use age::cli_common::read_recipients;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    error::{
-        ConfigError, ConfigValidationError, NotFound, RecipientsFactoryError,
-    },
-};
+use crate::error::{ConfigError, ConfigValidationError, NotFound, RecipientsFactoryError};
 
 /// Struct representation of the Ragers config file. Used for deserialization.
 #[derive(Serialize, Deserialize, Debug)]
@@ -370,10 +366,15 @@ impl<'config> RecipientsFactory<'config> {
         if !cache.contains_key(age_recipient_str) {
             log::debug!("Recipient \"{age_recipient_str}\" is not cached, parsing");
 
-            let parsed_recipient =
-                read_recipients(vec![age_recipient_str.to_owned()], vec![], vec![], None, stdin_guard)
-                    .unwrap()
-                    .remove(0);
+            let parsed_recipient = read_recipients(
+                vec![age_recipient_str.to_owned()],
+                vec![],
+                vec![],
+                None,
+                stdin_guard,
+            )
+            .unwrap()
+            .remove(0);
             let rc_recipient: Rc<dyn age::Recipient + Send> = Rc::from(parsed_recipient);
 
             cache.insert(age_recipient_str.to_owned(), rc_recipient);
