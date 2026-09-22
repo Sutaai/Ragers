@@ -61,22 +61,11 @@ impl RawConfig {
             .build()?;
 
         match builder.try_deserialize() {
-            Ok(config) => {
-                log::debug!("Config was deserialized, validating...");
-
-                match ConfigValidator.validate(&config) {
-                    Ok(_) => Ok(config),
-                    Err(mut errs) => {
-                        log::error!("Config failed validation");
-                        let one_err = errs.pop().unwrap();
-                        Err(ConfigError::from(one_err))
-                    }
-                }
-            }
-            Err(err) => {
-                log::error!("Config failed to deserialize");
-                Err(ConfigError::from(err))
-            }
+            Ok(config) => match ConfigValidator.validate(&config) {
+                Ok(_) => Ok(config),
+                Err(errs) => Err(ConfigError::from(errs)),
+            },
+            Err(err) => Err(ConfigError::from(err)),
         }
     }
 }
@@ -115,17 +104,13 @@ impl ConfigValidator {
         }
 
         if all_errors.is_empty() {
-            log::trace!("Config passed validation");
             Ok(())
         } else {
-            log::debug!("Validation errors: {:?}", all_errors);
             Err(all_errors)
         }
     }
 
     fn check_recipients_age_valid(&self, config: &RawConfig) -> ConfCheckResult {
-        log::trace!("Checking if all recipients are valid");
-
         let mut fake_guard = age::cli_common::StdinGuard::new(false);
         let recipients = &config.recipients.direct;
         let recipients_factory = RecipientsFactory::new(&config.recipients);
@@ -142,13 +127,10 @@ impl ConfigValidator {
             };
         }
 
-        log::trace!("Check complete");
         Ok(())
     }
 
     fn check_recipients_value_unique(&self, config: &RawConfig) -> ConfCheckResult {
-        log::trace!("Checking recipients are unique");
-
         let recipients = &config.recipients.direct;
         let mut seen: HashSet<&String> = HashSet::new();
 
@@ -160,13 +142,10 @@ impl ConfigValidator {
             }
         }
 
-        log::trace!("Check complete");
         Ok(())
     }
 
     fn check_recipients_file_valid_path(&self, config: &RawConfig) -> ConfCheckResult {
-        log::trace!("Checking recipients files are valid");
-
         let files = &config.recipients.files;
 
         for (alias, path) in files {
@@ -181,13 +160,10 @@ impl ConfigValidator {
             }
         }
 
-        log::trace!("Check complete");
         Ok(())
     }
 
     fn check_groups_valid_recipients(&self, config: &RawConfig) -> ConfCheckResult {
-        log::trace!("Checking groups contain valid recipients");
-
         let groups = &config.recipients.groups;
         let recipients: &Vec<&String> = &config.recipients.direct.keys().collect();
 
@@ -202,13 +178,10 @@ impl ConfigValidator {
             }
         }
 
-        log::trace!("Check complete");
         Ok(())
     }
 
     fn check_files_unique_source(&self, config: &RawConfig) -> ConfCheckResult {
-        log::trace!("Checking recipients files source are unique");
-
         let files = &config.files;
         let mut seen: HashSet<&PathBuf> = HashSet::new();
 
@@ -221,13 +194,10 @@ impl ConfigValidator {
             }
         }
 
-        log::trace!("Check complete");
         Ok(())
     }
 
     fn check_files_unique_destination(&self, config: &RawConfig) -> ConfCheckResult {
-        log::trace!("Checking files destination are unique");
-
         let files = &config.files;
         let mut seen: HashSet<&PathBuf> = HashSet::new();
 
@@ -240,13 +210,10 @@ impl ConfigValidator {
             }
         }
 
-        log::trace!("Check complete");
         Ok(())
     }
 
     fn check_files_valid_recipients(&self, config: &RawConfig) -> ConfCheckResult {
-        log::trace!("Checking files recipients are valid");
-
         let recipients_factory = RecipientsFactory::new(&config.recipients);
         let mut fake_guard = age::cli_common::StdinGuard::new(false);
 
@@ -264,13 +231,10 @@ impl ConfigValidator {
             }
         }
 
-        log::trace!("Check complete");
         Ok(())
     }
 
     fn check_files_recipients_unique(&self, config: &RawConfig) -> ConfCheckResult {
-        log::trace!("Checking files recipients are unique");
-
         for (index, file) in config.files.iter().enumerate() {
             let mut recipients: Vec<&String> =
                 file.recipients.iter().duplicates().dedup().collect();
@@ -283,7 +247,6 @@ impl ConfigValidator {
             }
         }
 
-        log::trace!("Check complete");
         Ok(())
     }
 }
@@ -364,8 +327,6 @@ impl<'config> RecipientsFactory<'config> {
         let mut cache = self.age_recipients_cache.borrow_mut();
 
         if !cache.contains_key(age_recipient_str) {
-            log::debug!("Recipient \"{age_recipient_str}\" is not cached, parsing");
-
             let parsed_recipient = read_recipients(
                 vec![age_recipient_str.to_owned()],
                 vec![],
@@ -380,7 +341,6 @@ impl<'config> RecipientsFactory<'config> {
             cache.insert(age_recipient_str.to_owned(), rc_recipient);
         }
 
-        log::trace!("Obtaining recipient struct for \"{age_recipient_str}\"");
         let age_recipient = Rc::clone(cache.get(age_recipient_str).unwrap_or_else(|| {
             panic!("expected {age_recipient_str} to exist in factory cache, but nothing was found")
         }));
@@ -438,6 +398,7 @@ impl<'config> RecipientsFactory<'config> {
             .get(config_key)
             .ok_or_else(|| NotFound(config_key.to_owned()))?;
 
+        // Note: This could use some extra optimization to avoid reading the file each iteration
         let file_content = read_recipients_file(file_path)?;
 
         for age_recipient_str in &file_content {
@@ -479,14 +440,4 @@ impl<'config> RecipientsFactory<'config> {
 
         Ok(fetched_recipients)
     }
-}
-
-pub struct IdentitiesFactory {
-    identities_cache: RefCell<HashMap<String, Box<dyn age::Identity>>>,
-}
-
-impl IdentitiesFactory {
-    pub fn obtain_for_identity(&self) {}
-
-    pub fn obtain_from_file(&self) {}
 }

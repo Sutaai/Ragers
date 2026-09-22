@@ -19,6 +19,5 @@ config = { version = "0.15.25", features = ["yaml"] }
 env_logger = { version = "0.11.11", features = ["color", "kv"] }
 inquire = "0.9.4"
 itertools = "0.15.0"
-log = "0.4.33"
 serde = { version = "1.0.228", features = ["serde_derive"] }
 thiserror = { version = "2.0.19", features = ["std"] }

@@ -1,5 +1,4 @@
 use std::cell::RefCell;
-use std::rc::Rc;
 
 use crate::cli::Cli;
 use crate::config::{RawConfig, RecipientsFactory};
@@ -24,11 +23,14 @@ impl<'config> Context<'config> {
         })
     }
 
-    pub fn get_identities(&self) -> Result<Vec<Rc<dyn age::Identity>>, age::cli_common::ReadError> {
+    pub fn get_identities(
+        &self,
+    ) -> Result<Vec<Box<dyn age::Identity>>, age::cli_common::ReadError> {
         let mut stdin_guard = age::cli_common::StdinGuard::new(true);
-    
+
         let dyn_identities = age::cli_common::read_identities(
-            self.cli.identities_file
+            self.cli
+                .identities_file
                 .iter()
                 .map(|item| {
                     item.to_str()
@@ -39,11 +41,7 @@ impl<'config> Context<'config> {
             None,
             &mut stdin_guard,
         )?;
-    
-        let rc_identities: Vec<Rc<dyn age::Identity>> = dyn_identities.into_iter().map(|item| {
-            Rc::from(item)
-        }).collect();
-    
-        Ok(rc_identities)
+
+        Ok(dyn_identities)
     }
 }

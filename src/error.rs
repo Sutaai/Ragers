@@ -8,11 +8,17 @@ pub struct NotFound(pub String);
 
 #[derive(Error, Debug)]
 pub enum ConfigError {
-    #[error("Could not parse config file: {0}")]
+    #[error("could not build config file: {0}")]
     ParseError(#[from] config::ConfigError),
     // #[error("Validation error: {0}")]
-    #[error(transparent)]
-    ValidationError(#[from] ConfigValidationError),
+    #[error("validation error: {0:#?}")]
+    ValidationError(Vec<ConfigValidationError>),
+}
+
+impl From<Vec<ConfigValidationError>> for ConfigError {
+    fn from(errs: Vec<ConfigValidationError>) -> Self {
+        ConfigError::ValidationError(errs)
+    }
 }
 
 #[derive(Error, Debug)]
@@ -31,7 +37,7 @@ pub enum ConfigValidationError {
         "Duplicated recipient:
 - Alias: {value}
 
-Note: The key is not the duplicated value but the value itself"
+Note: The key isn't duplicated but the value itself is"
     )]
     DuplicatedRecipient { value: String },
     #[error(
@@ -64,22 +70,24 @@ Duplicated alias: {}", .index, .alias)]
 pub enum RecipientsFactoryError {
     #[error(transparent)]
     NotFound(#[from] NotFound),
+
     #[error(transparent)]
     RecipientParseError(#[from] age::cli_common::ReadError),
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 }
 
 #[derive(Error, Debug)]
 pub enum CmdError {
+    #[error("{0}")]
+    PreconditionCheck(&'static str),
+
     #[error(transparent)]
     Config(#[from] ConfigError),
 
     #[error("Could not parse recipient or identity: {0}")]
     AgeReadError(#[from] age::cli_common::ReadError),
-
-    #[error("Config validation error: {0}")]
-    Validation(#[from] ConfigValidationError),
 
     #[error(transparent)]
     RecipientsFactory(#[from] RecipientsFactoryError),
