@@ -51,16 +51,28 @@ pub struct RawConfigFile {
 }
 
 impl RawConfig {
-    /// Creates a new instance of [`RawConfig`] by reading the file at [`config_path`].
+    /// Creates a new instance of [`RawConfig`] by reading the file at `config_path`.
     ///
     /// This function will read the path it is given and attempt to deserialize it through their
     /// structs representation.
     pub fn new(config_path: &Path) -> Result<Self, ConfigError> {
-        let builder = config::Config::builder()
-            .add_source(config::File::from(config_path))
-            .build()?;
+        let builder = config::Config::builder().add_source(config::File::from(config_path));
 
-        match builder.try_deserialize() {
+        return RawConfig::new_from_builder(builder);
+    }
+
+    /// Builds the config directly from a [`config::ConfigBuilder`]. This allow for extra tweaking
+    /// when parsing the config.
+    ///
+    /// This is mostly used for testing purposes, to test specific cases through setting
+    /// [`config::ConfigBuilder::set_override`] or [`config::ConfigBuilder::set_default`].
+    /// If you wish to build config directly from a file path instead without having to create the
+    /// builder yourself, use [`RawConfig::new`] instead. This is the preferred public method to
+    /// use.
+    pub fn new_from_builder(
+        builder: config::ConfigBuilder<config::builder::DefaultState>,
+    ) -> Result<Self, ConfigError> {
+        match builder.build()?.try_deserialize() {
             Ok(config) => match ConfigValidator.validate(&config) {
                 Ok(_) => Ok(config),
                 Err(errs) => Err(ConfigError::from(errs)),

@@ -8,11 +8,7 @@ use clap::{Parser, Subcommand};
 use inquire::Confirm;
 use itertools::Itertools;
 
-use crate::{
-    config::RawConfigFile,
-    context::Context,
-    error::{CmdError, RecipientsFactoryError},
-};
+use crate::{config::RawConfigFile, context::Context, error::CmdError};
 
 #[derive(Parser)]
 #[command(version, about)]
@@ -89,101 +85,95 @@ fn find_comparable_path<'path>(
     Ok(None)
 }
 
-fn begin_encrypt_files(
-    ctx: &Context,
-    files: &[&RawConfigFile],
-) -> Result<(), RecipientsFactoryError> {
+fn begin_encrypt_files(ctx: &Context, files: &[&RawConfigFile]) -> Result<(), CmdError> {
     let mut stdin_guard = ctx.stdin_guard.borrow_mut();
 
     for file in files {
-        // Obtain recipients
-        let age_recipients = ctx
+        let recipients = ctx
             .recipients_factory
             .obtain_for_file(file, &mut stdin_guard)?;
 
         let recipient_refs: Vec<&dyn age::Recipient> =
-            age_recipients.iter().map(|r| r.as_ref()).collect();
+            recipients.iter().map(|r| r.as_ref()).collect();
 
         // Configure age's encryptor
-        let encryptor = age::Encryptor::with_recipients(recipient_refs.into_iter())
-            .expect("expected encryptor to accept recipients");
-        let format: age::armor::Format = if file.armor {
+        let format = if file.armor {
             age::armor::Format::AsciiArmor
         } else {
             age::armor::Format::Binary
         };
 
-        let plaintext = std::fs::read(&file.src)
-            .unwrap_or_else(|_| panic!("could not read source file \"{}\"", file.src.display()));
+        let encrypted_content = {
+            let mut encrypted_content: Vec<u8> = Vec::new();
 
-        let output = std::fs::File::create(&file.out)
-            .unwrap_or_else(|_| panic!("could not create output file \"{}\"", file.out.display()));
+            let encryptor = age::Encryptor::with_recipients(recipient_refs.into_iter())?;
 
-        let armored_output = age::armor::ArmoredWriter::wrap_output(output, format)
-            .expect("could not wrap output writer");
+            let content = std::fs::read(&file.src).map_err(|err| CmdError::ReadFile {
+                path: file.src.clone(),
+                source: err,
+            })?;
 
-        let mut writer = encryptor
-            .wrap_output(armored_output)
-            .expect("could not begin encryption");
+            let mut decryptor = encryptor.wrap_output(age::armor::ArmoredWriter::wrap_output(
+                &mut encrypted_content,
+                format,
+            )?)?;
+            decryptor.write_all(&content)?;
+            decryptor.finish().and_then(|armor| armor.finish())?;
 
-        writer
-            .write_all(&plaintext)
-            .expect("could not write plaintext to encrypted output");
+            encrypted_content
+        };
 
-        writer
-            .finish()
-            .and_then(|armor| armor.finish())
-            .expect("could not finish encryption");
+        // Write to encrypted file
+        std::fs::write(&file.out, &encrypted_content).map_err(|err| CmdError::WriteFile {
+            path: file.src.clone(),
+            source: err,
+        })?;
 
-        fs::remove_file(&file.src).unwrap_or_else(|_| {
-            todo!()
-        });
+        // This should only be done after all files have been encrypted
+        fs::remove_file(&file.src)?;
     }
 
     Ok(())
 }
 
-fn begin_decrypt_files(ctx: &Context, files: &[&RawConfigFile], identities: Vec<&dyn age::Identity>) -> Result<(), CmdError> {
+fn begin_decrypt_files(
+    _: &Context,
+    files: &[&RawConfigFile],
+    identities: Vec<&dyn age::Identity>,
+) -> Result<(), CmdError> {
     for file in files {
-        let encrypted = std::fs::File::open(&file.out)
-            .unwrap_or_else(|_| panic!("could not open encrypted file \"{}\"", file.out.display()));
+        let decrypted_content = {
+            let encrypted_file =
+                std::fs::File::open(&file.out).map_err(|err| CmdError::ReadFile {
+                    path: file.out.clone(),
+                    source: err,
+                })?;
 
-        // ArmoredReader auto-detects whether the input is ASCII-armored or binary.
-        let armored_reader = age::armor::ArmoredReader::new(encrypted);
+            // ArmoredReader can both read ASCII and binary formats, no need to check ourselves.
+            let decryptor =
+                age::Decryptor::new_buffered(age::armor::ArmoredReader::new(encrypted_file))?;
 
-        let decryptor = age::Decryptor::new_buffered(armored_reader).unwrap_or_else(|_| {
-            panic!(
-                "could not read age header from \"{}\", is it a valid age file?",
-                file.out.display()
-            )
-        });
+            let mut decrypted_content_vec: Vec<u8> = Vec::new();
 
-        let reader = decryptor
-            .decrypt(identities.iter().copied())
-            .map_err(|t| {
-                todo!()
-            });
+            let mut decryptor_stream = match decryptor.decrypt(identities.iter().copied()) {
+                Ok(res) => res,
+                Err(_) => continue,
+            };
 
-        let mut reader_result = match reader {
-            Ok(res) => res,
-            Err(_) => continue,
+            decryptor_stream
+                .read_to_end(&mut decrypted_content_vec)
+                .expect("could not read decrypted contents");
+
+            decrypted_content_vec
         };
 
-        let mut plaintext = Vec::new();
-        reader_result
-            .read_to_end(&mut plaintext)
-            .expect("could not read decrypted contents");
+        std::fs::write(&file.src, &decrypted_content).map_err(|err| CmdError::WriteFile {
+            path: file.src.clone(),
+            source: err,
+        })?;
 
-        std::fs::write(&file.src, &plaintext).unwrap_or_else(|_| {
-            panic!(
-                "could not write decrypted file to \"{}\"",
-                file.src.display()
-            )
-        });
-
-        fs::remove_file(&file.out).unwrap_or_else(|_| {
-            todo!()
-        });
+        // This should only be done after all files have been decrypted
+        fs::remove_file(&file.out)?;
     }
 
     Ok(())

@@ -11,14 +11,13 @@ mod config;
 mod context;
 mod error;
 
-
 fn main() {
     let cli = Cli::parse();
     match wrap_execution(cli) {
         Ok(_) => {} // Execution is done
         Err(err) => {
             println!("error: {err}")
-        },
+        }
     }
 }
 

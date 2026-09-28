@@ -98,9 +98,33 @@ pub enum CmdError {
     #[error("no files to process")]
     NoFilesToProcess,
 
+    #[error("IO error, could not read \"{path}\": {source}")]
+    ReadFile {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+
+    #[error("IO error, could not write at \"{path}\": {source}")]
+    WriteFile {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+
+    /// For more "unknown" IO error
+    #[error("IO error: {0}")]
+    IO(#[from] std::io::Error),
+
     /// Returned when there is an underlying issue with the config file
     #[error(transparent)]
     Config(#[from] ConfigError),
+
+    /// Returned when age could not decrypt a file
+    #[error("decryption error: {0}")]
+    AgeDecryptError(#[from] age::DecryptError),
+
+    /// Returned when age could not encrypt a file
+    #[error("encryption error: {0}")]
+    AgeEncryptError(#[from] age::EncryptError),
 
     /// Returned when the age library is unable to parse one of it's struct
     #[error("could not parse recipient or identity: {0}")]
