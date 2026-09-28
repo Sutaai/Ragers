@@ -1,7 +1,5 @@
 use std::{
-    fs,
-    io::{Read, Write},
-    path::PathBuf,
+    fmt::Display, fs, io::{Read, Write}, path::PathBuf,
 };
 
 use clap::{Parser, Subcommand};
@@ -179,6 +177,43 @@ fn begin_decrypt_files(
     Ok(())
 }
 
+enum Action {
+    Encryption,
+    Decryption
+}
+
+impl Display for Action {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Action::Encryption => write!(f, "encrypt"),
+            Action::Decryption => write!(f, "decrypt"),
+        }
+    }
+}
+
+fn confirm_action(files: &[&RawConfigFile], action: Action) -> bool {
+    let files_displayed: String = files
+        .iter()
+        .map(|path| {
+            match action {
+                Action::Encryption => format!("\t- {}", path.src.display()),
+                Action::Decryption => format!("\t- {}", path.out.display()),
+            }
+        })
+        .join("\n");
+
+    let confirm_str = format!(
+        "There are {} files to {action}:\n{}\nProceed with encryption?",
+        files.len(),
+        files_displayed
+    );
+
+    Confirm::new(&confirm_str)
+        .with_default(true)
+        .prompt()
+        .expect("Couldn't prompt to user")
+}
+
 pub fn encrypt(ctx: &Context, to_encrypt_files: &Option<Vec<PathBuf>>) -> Result<(), CmdError> {
     let to_process_files: Vec<&RawConfigFile> = match to_encrypt_files {
         None => ctx.config.files.iter().collect(),
@@ -199,24 +234,9 @@ pub fn encrypt(ctx: &Context, to_encrypt_files: &Option<Vec<PathBuf>>) -> Result
         return Err(CmdError::NoFilesToProcess);
     }
 
-    let files_as_str_list: String = to_process_files
-        .iter()
-        .map(|path| format!("\t- {}", path.src.display()))
-        .join("\n");
-
-    let confirm_str = format!(
-        "There are {} files to encrypt:\n{}\nProceed with encryption?",
-        to_process_files.len(),
-        files_as_str_list
-    );
-
-    if Confirm::new(&confirm_str)
-        .with_default(true)
-        .prompt()
-        .expect("Couldn't prompt to user")
-    {
+    if confirm_action(&to_process_files, Action::Encryption) {
         begin_encrypt_files(ctx, &to_process_files)?
-    }
+    };
 
     Ok(())
 }
@@ -245,24 +265,9 @@ pub fn decrypt(ctx: &Context, to_decrypt_files: &Option<Vec<PathBuf>>) -> Result
     let identities: Vec<&dyn age::Identity> =
         identities_struct.iter().map(|i| i.as_ref()).collect();
 
-    let files_as_str_list: String = to_process_files
-        .iter()
-        .map(|path| format!("\t- {}", path.out.display()))
-        .join("\n");
-
-    let confirm_str = format!(
-        "There are {} files to decrypt:\n{}\nProceed with decryption?",
-        to_process_files.len(),
-        files_as_str_list
-    );
-
-    if Confirm::new(&confirm_str)
-        .with_default(true)
-        .prompt()
-        .expect("Couldn't prompt to user")
-    {
+    if confirm_action(&to_process_files, Action::Decryption) {
         begin_decrypt_files(ctx, &to_process_files, identities)?
-    }
+    };
 
     Ok(())
 }
