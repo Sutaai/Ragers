@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::{ConfigError, ConfigValidationError, NotFound, RecipientsFactoryError};
 
 /// Struct representation of the Ragers config file. Used for deserialization.
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct RawConfig {
     /// A list of pre-defined recipients
     pub recipients: RawConfigRecipients,
@@ -22,7 +22,7 @@ pub struct RawConfig {
 }
 
 /// Struct representation of recipients definition in the config file. Part of [`RawConfig`].
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct RawConfigRecipients {
     /// A list of recipients that may be used to encrypt and/or decrypt files
     #[serde(flatten, rename = "recipients")]
@@ -37,7 +37,7 @@ pub struct RawConfigRecipients {
 
 /// Struct representation of files (to encrypt/decrypt) definition in the config file. Part of
 /// [`RawConfig`].
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct RawConfigFile {
     /// The path of the unencrypted file source
     pub src: PathBuf,
@@ -357,7 +357,7 @@ impl<'config> RecipientsFactory<'config> {
             .config_recipients
             .direct
             .get(config_key)
-            .ok_or_else(|| NotFound(config_key.to_owned()))?;
+            .ok_or_else(|| NotFound::config_recipient(config_key))?;
 
         let age_recipient = self.get_or_store_recipient(age_recipient_str, stdin_guard)?;
 
@@ -375,7 +375,7 @@ impl<'config> RecipientsFactory<'config> {
             .config_recipients
             .groups
             .get(config_key)
-            .ok_or_else(|| NotFound(config_key.to_owned()))?;
+            .ok_or_else(|| NotFound::config_group(config_key))?;
 
         for recipient_reference_key in group {
             let recipient = self.direct_recipient(recipient_reference_key, stdin_guard)?;
@@ -396,7 +396,7 @@ impl<'config> RecipientsFactory<'config> {
             .config_recipients
             .files
             .get(config_key)
-            .ok_or_else(|| NotFound(config_key.to_owned()))?;
+            .ok_or_else(|| NotFound::config_file(config_key))?;
 
         // Note: This could use some extra optimization to avoid reading the file each iteration
         let file_content = read_recipients_file(file_path)?;

@@ -143,11 +143,7 @@ fn begin_encrypt_files(
     Ok(())
 }
 
-fn begin_decrypt_files(ctx: &Context, files: &[&RawConfigFile]) -> Result<(), CmdError> {
-    let identities_struct = ctx.get_identities()?;
-    let identity_refs: Vec<&dyn age::Identity> =
-        identities_struct.iter().map(|i| i.as_ref()).collect();
-
+fn begin_decrypt_files(ctx: &Context, files: &[&RawConfigFile], identities: Vec<&dyn age::Identity>) -> Result<(), CmdError> {
     for file in files {
         let encrypted = std::fs::File::open(&file.out)
             .unwrap_or_else(|_| panic!("could not open encrypted file \"{}\"", file.out.display()));
@@ -163,7 +159,7 @@ fn begin_decrypt_files(ctx: &Context, files: &[&RawConfigFile]) -> Result<(), Cm
         });
 
         let reader = decryptor
-            .decrypt(identity_refs.iter().copied())
+            .decrypt(identities.iter().copied())
             .map_err(|t| {
                 todo!()
             });
@@ -210,8 +206,7 @@ pub fn encrypt(ctx: &Context, to_encrypt_files: &Option<Vec<PathBuf>>) -> Result
     };
 
     if to_process_files.is_empty() {
-        todo!();
-        return Ok(());
+        return Err(CmdError::NoFilesToProcess);
     }
 
     let files_as_str_list: String = to_process_files
@@ -237,12 +232,6 @@ pub fn encrypt(ctx: &Context, to_encrypt_files: &Option<Vec<PathBuf>>) -> Result
 }
 
 pub fn decrypt(ctx: &Context, to_decrypt_files: &Option<Vec<PathBuf>>) -> Result<(), CmdError> {
-    if ctx.cli.identities_file.is_empty() {
-        return Err(CmdError::PreconditionCheck(
-            "No identity provided. Use --identity-file to supply decrypting identity.",
-        ))
-    }
-
     let to_process_files: Vec<&RawConfigFile> = match to_decrypt_files {
         None => ctx.config.files.iter().collect(),
         Some(requested) => ctx
@@ -259,9 +248,12 @@ pub fn decrypt(ctx: &Context, to_decrypt_files: &Option<Vec<PathBuf>>) -> Result
     };
 
     if to_process_files.is_empty() {
-        println!("There are no files to decrypt.");
-        return Ok(());
+        return Err(CmdError::NoFilesToProcess);
     }
+
+    let identities_struct = ctx.get_identities()?;
+    let identities: Vec<&dyn age::Identity> =
+        identities_struct.iter().map(|i| i.as_ref()).collect();
 
     let files_as_str_list: String = to_process_files
         .iter()
@@ -279,7 +271,7 @@ pub fn decrypt(ctx: &Context, to_decrypt_files: &Option<Vec<PathBuf>>) -> Result
         .prompt()
         .expect("Couldn't prompt to user")
     {
-        begin_decrypt_files(ctx, &to_process_files)?
+        begin_decrypt_files(ctx, &to_process_files, identities)?
     }
 
     Ok(())

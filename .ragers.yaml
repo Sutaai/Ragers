@@ -10,7 +10,7 @@ recipients:
     admins:
       - user5
       - user6
- 
+
   files:
     test1: tests/definitions/assets/Rec1.txt
     test3: tests/definitions/assets/Rec3.txt

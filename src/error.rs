@@ -3,8 +3,22 @@ use std::path::PathBuf;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-#[error("Item not found: {0}")]
-pub struct NotFound(pub String);
+#[error("{0}")]
+pub struct NotFound(String);
+
+impl NotFound {
+    pub fn config_recipient(recipient: &str) -> Self {
+        NotFound(format!("recipient in config not found: {recipient}").to_owned())
+    }
+
+    pub fn config_group(group: &str) -> Self {
+        NotFound(format!("group in config not found: {group}").to_owned())
+    }
+
+    pub fn config_file(file: &str) -> Self {
+        NotFound(format!("file in config not found: {file}").to_owned())
+    }
+}
 
 #[derive(Error, Debug)]
 pub enum ConfigError {
@@ -69,7 +83,7 @@ Duplicated alias: {}", .index, .alias)]
 #[derive(Error, Debug)]
 pub enum RecipientsFactoryError {
     #[error(transparent)]
-    NotFound(#[from] NotFound),
+    KeyInConfigNotFound(#[from] NotFound),
 
     #[error(transparent)]
     RecipientParseError(#[from] age::cli_common::ReadError),
@@ -80,15 +94,19 @@ pub enum RecipientsFactoryError {
 
 #[derive(Error, Debug)]
 pub enum CmdError {
-    #[error("{0}")]
-    PreconditionCheck(&'static str),
+    /// Returned when there are no files to process found in the config file
+    #[error("no files to process")]
+    NoFilesToProcess,
 
+    /// Returned when there is an underlying issue with the config file
     #[error(transparent)]
     Config(#[from] ConfigError),
 
-    #[error("Could not parse recipient or identity: {0}")]
+    /// Returned when the age library is unable to parse one of it's struct
+    #[error("could not parse recipient or identity: {0}")]
     AgeReadError(#[from] age::cli_common::ReadError),
 
+    /// Returned when the recipients factory has had an issue
     #[error(transparent)]
     RecipientsFactory(#[from] RecipientsFactoryError),
 }
