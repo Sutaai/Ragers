@@ -1,5 +1,8 @@
 use std::{
-    fmt::Display, fs, io::{Read, Write}, path::PathBuf,
+    fmt::Display,
+    fs,
+    io::{Read, Write},
+    path::PathBuf,
 };
 
 use clap::{Parser, Subcommand};
@@ -179,7 +182,7 @@ fn begin_decrypt_files(
 
 enum Action {
     Encryption,
-    Decryption
+    Decryption,
 }
 
 impl Display for Action {
@@ -194,11 +197,9 @@ impl Display for Action {
 fn confirm_action(files: &[&RawConfigFile], action: Action) -> bool {
     let files_displayed: String = files
         .iter()
-        .map(|path| {
-            match action {
-                Action::Encryption => format!("\t- {}", path.src.display()),
-                Action::Decryption => format!("\t- {}", path.out.display()),
-            }
+        .map(|path| match action {
+            Action::Encryption => format!("\t- {}", path.src.display()),
+            Action::Decryption => format!("\t- {}", path.out.display()),
         })
         .join("\n");
 
