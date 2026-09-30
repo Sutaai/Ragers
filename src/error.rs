@@ -92,45 +92,82 @@ pub enum RecipientsFactoryError {
     Io(#[from] std::io::Error),
 }
 
+#[derive(Debug, Error)]
+#[error("could not read \"{path}\": {source}")]
+pub struct ReadFileError {
+    pub path: PathBuf,
+    pub source: std::io::Error,
+}
+
+#[derive(Debug, Error)]
+#[error("could not write at \"{path}\": {source}")]
+pub struct WriteFileError {
+    pub path: PathBuf,
+    pub source: std::io::Error,
+}
+
+#[derive(Debug, Error)]
+#[error("could not delete file at \"{path}\": {source}")]
+pub struct DeleteFileError {
+    pub path: PathBuf,
+    pub source: std::io::Error,
+}
+
+#[derive(Debug, Error)]
+pub enum DecryptionError {
+    #[error(transparent)]
+    ReadFile(#[from] ReadFileError),
+
+    // #[error(transparent)]
+    #[error("decryption error: {0}")]
+    AgeDecrypt(#[from] age::DecryptError),
+}
+
+#[derive(Debug, Error)]
+pub enum EncryptionError {
+    #[error(transparent)]
+    ReadFile(#[from] ReadFileError),
+
+    // #[error(transparent)]
+    #[error("encryption error: {0}")]
+    AgeEncrypt(#[from] age::EncryptError),
+
+    // Error returned by wrap_output for encryption
+    #[error(transparent)]
+    IO(#[from] std::io::Error),
+}
+
 #[derive(Error, Debug)]
 pub enum CmdError {
     /// Returned when there are no files to process found in the config file
     #[error("no files to process")]
     NoFilesToProcess,
 
-    #[error("IO error, could not read \"{path}\": {source}")]
-    ReadFile {
-        path: PathBuf,
-        source: std::io::Error,
-    },
-
-    #[error("IO error, could not write at \"{path}\": {source}")]
-    WriteFile {
-        path: PathBuf,
-        source: std::io::Error,
-    },
-
-    /// For more "unknown" IO error
-    #[error("IO error: {0}")]
-    IO(#[from] std::io::Error),
-
     /// Returned when there is an underlying issue with the config file
     #[error(transparent)]
     Config(#[from] ConfigError),
 
-    /// Returned when age could not decrypt a file
-    #[error("decryption error: {0}")]
-    AgeDecryptError(#[from] age::DecryptError),
+    #[error(transparent)]
+    WriteFile(#[from] WriteFileError),
 
-    /// Returned when age could not encrypt a file
-    #[error("encryption error: {0}")]
-    AgeEncryptError(#[from] age::EncryptError),
-
-    /// Returned when the age library is unable to parse one of it's struct
-    #[error("could not parse recipient or identity: {0}")]
-    AgeReadError(#[from] age::cli_common::ReadError),
+    #[error(transparent)]
+    DeleteFile(#[from] DeleteFileError),
 
     /// Returned when the recipients factory has had an issue
     #[error(transparent)]
     RecipientsFactory(#[from] RecipientsFactoryError),
+
+    #[error("decryption error: {0}")]
+    DecryptionError(#[from] DecryptionError),
+
+    #[error("encryption error: {0}")]
+    EncryptionError(#[from] EncryptionError),
+
+    /// For more "unknown" IO error
+    // #[error("IO error: {0}")]
+    // IO(#[from] std::io::Error),
+
+    /// Returned when the age library is unable to parse one of it's struct
+    #[error("could not parse recipient or identity: {0}")]
+    AgeReadError(#[from] age::cli_common::ReadError),
 }
