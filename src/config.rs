@@ -1,9 +1,7 @@
-use std::{
-    cell::RefCell,
-    collections::{HashMap, HashSet},
-    path::{Path, PathBuf},
-    rc::Rc,
-};
+use std::cell::RefCell;
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
+use std::rc::Rc;
 
 use age::cli_common::read_recipients;
 use itertools::Itertools;

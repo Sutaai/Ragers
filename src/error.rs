@@ -140,12 +140,15 @@ pub enum EncryptionError {
 #[derive(Error, Debug)]
 pub enum CmdError {
     /// Returned when there are no files to process found in the config file
-    #[error("no files to process")]
+    #[error("no files to process, is it defined in your config file?")]
     NoFilesToProcess,
 
     /// Returned when there is an underlying issue with the config file
     #[error(transparent)]
     Config(#[from] ConfigError),
+
+    #[error(transparent)]
+    ReadFile(#[from] ReadFileError),
 
     #[error(transparent)]
     WriteFile(#[from] WriteFileError),
@@ -163,9 +166,9 @@ pub enum CmdError {
     #[error("encryption error: {0}")]
     EncryptionError(#[from] EncryptionError),
 
-    /// For more "unknown" IO error
-    // #[error("IO error: {0}")]
-    // IO(#[from] std::io::Error),
+    /// For more "unknown" IO error, notably [`crate::cli::find_comparable_path`]
+    #[error("IO error: {0}")]
+    IO(#[from] std::io::Error),
 
     /// Returned when the age library is unable to parse one of it's struct
     #[error("could not parse recipient or identity: {0}")]

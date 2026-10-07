@@ -1,5 +1,9 @@
 use std::{
-    borrow::Borrow, fmt::Display, fs, io::{Read, Write}, path::{Path, PathBuf},
+    borrow::Borrow,
+    fmt::Display,
+    fs,
+    io::{Read, Write},
+    path::{Path, PathBuf},
 };
 
 use clap::{Args, Parser, Subcommand};
@@ -100,7 +104,7 @@ pub struct IdentityArgs {
 }
 
 /// Given a list of path, attempt to find a path that is comparable to the given path.
-fn find_comparable_path<'path, P: Borrow<PathBuf> + AsRef<Path>> (
+fn find_comparable_path<'path, P: Borrow<PathBuf> + AsRef<Path>>(
     path: &PathBuf,
     list: &'path [P],
 ) -> Result<Option<&'path P>, std::io::Error> {
@@ -114,6 +118,20 @@ fn find_comparable_path<'path, P: Borrow<PathBuf> + AsRef<Path>> (
     }
 
     Ok(None)
+}
+
+fn find_comparable_path_single<'path, P: Borrow<PathBuf> + AsRef<Path>>(
+    path_one: P,
+    path_two: P,
+) -> Result<bool, std::io::Error> {
+    let full_path_one = std::path::absolute(path_one)?;
+    let full_path_two = std::path::absolute(path_two)?;
+
+    if full_path_one == full_path_two {
+        return Ok(true);
+    }
+
+    Ok(false)
 }
 
 fn get_decrypted_content(
@@ -336,6 +354,51 @@ pub fn decrypt(
 
     if confirm_action(&to_process_files, Action::Decryption) {
         begin_decrypt_files(&to_process_files, identities)?
+    };
+
+    Ok(())
+}
+
+pub fn edit(
+    ctx: &Context,
+    file_to_edit: &PathBuf,
+    identities: &IdentityArgs,
+) -> Result<(), CmdError> {
+    let matched_file = ctx
+        .config
+        .files
+        .iter()
+        .find(|cfg| {
+            find_comparable_path_single(&cfg.src, file_to_edit)
+                .ok()
+                .is_some()
+                || find_comparable_path_single(&cfg.out, file_to_edit)
+                    .ok()
+                    .is_some()
+        })
+        .ok_or(CmdError::NoFilesToProcess)?;
+
+    let is_encrypted = find_comparable_path_single(&matched_file.out, file_to_edit)?;
+    let file_path = if is_encrypted {
+        println!("matching against an encrypted file");
+        &matched_file.out
+    } else {
+        println!("matching against a source file");
+        &matched_file.src
+    };
+
+    let file_content = {
+        if is_encrypted {
+            let identities_struct = get_identities(&identities.identities_file)?;
+            let final_identities: Vec<&dyn age::Identity> =
+                identities_struct.iter().map(|i| i.as_ref()).collect();
+            get_decrypted_content(file_path, &final_identities)?
+        } else {
+            fs::read(file_path).map_err(|err| ReadFileError {
+                path: file_path.clone(),
+                source: err,
+            })?
+        }
     };
 
     Ok(())
