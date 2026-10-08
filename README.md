@@ -5,7 +5,7 @@
 It features its own config file, `.ragers.yaml`, where you define which files you wish to encrypt, and whom is able to decrypt them.
 It uses the age's crate, so there is no commands dependency and is (hopefully!) interopeable with the original age's CLI.
 
-The format specification is at <https://age-encryption.org/v1>. The original age implementation was designed by @Benjojo and @FiloSottile. 
+The format specification is at <https://age-encryption.org/v1>. The original age implementation was designed by @Benjojo and @FiloSottile.
 
 This take a similar path to [agebox](<https://github.com/slok/agebox>). It's an alternative, a solution perhaps almost one-to-one.
 
@@ -21,12 +21,18 @@ This tool is currently English only.
 
 Only standard age X55219 and SSH (recipient-based) encryption will be supported.
 
+### ETA:
+
+<video width="512" controls>
+  <source src="./.codeberg/no_eta.mp4" type="video/mp4">
+</video>
+
 ---
 
 > [!CAUTION]
 > This is my first ever CLI (so published package), and my first Rust project, on top of that. Packages releases may not be a complete thing. I am learning, trying new things out.
 >
-> Help from new packagers is appreciated and welcome. 
+> Help from new packagers is appreciated and welcome.
 
 ---
 

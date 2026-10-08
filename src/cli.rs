@@ -3,12 +3,13 @@ use std::{
     fmt::Display,
     fs,
     io::{Read, Write},
-    path::{Path, PathBuf},
+    path::{Path, PathBuf}
 };
 
 use clap::{Args, Parser, Subcommand};
 use inquire::Confirm;
 use itertools::Itertools;
+use which::which;
 
 use crate::{
     config::RawConfigFile,
@@ -120,7 +121,7 @@ fn find_comparable_path<'path, P: Borrow<PathBuf> + AsRef<Path>>(
     Ok(None)
 }
 
-fn find_comparable_path_single<'path, P: Borrow<PathBuf> + AsRef<Path>>(
+fn find_comparable_path_single<P: Borrow<PathBuf> + AsRef<Path>>(
     path_one: P,
     path_two: P,
 ) -> Result<bool, std::io::Error> {
@@ -135,18 +136,15 @@ fn find_comparable_path_single<'path, P: Borrow<PathBuf> + AsRef<Path>>(
 }
 
 fn get_decrypted_content(
-    file: &PathBuf,
+    encrypted_content: &[u8],
+    // file: &PathBuf,
     identities: &[&dyn age::Identity],
 ) -> Result<Vec<u8>, DecryptionError> {
     let mut decrypted_content: Vec<u8> = Vec::new();
 
-    let encrypted_file = std::fs::File::open(&file).map_err(|err| ReadFileError {
-        path: file.clone(),
-        source: err,
-    })?;
-
     // ArmoredReader can both read ASCII and binary formats, no need to check ourselves.
-    let decryptor = age::Decryptor::new_buffered(age::armor::ArmoredReader::new(encrypted_file))?;
+    let decryptor =
+        age::Decryptor::new_buffered(age::armor::ArmoredReader::new(encrypted_content))?;
 
     // Write the decrypted content to `decrypted_content`.
     let mut decryptor_stream = decryptor.decrypt(identities.iter().copied())?;
@@ -158,7 +156,8 @@ fn get_decrypted_content(
 }
 
 fn get_encrypted_content(
-    file: &PathBuf,
+    raw_content: &[u8],
+    // file: &PathBuf,
     recipients: Vec<&dyn age::Recipient>,
     format: age::armor::Format,
 ) -> Result<Vec<u8>, EncryptionError> {
@@ -166,16 +165,11 @@ fn get_encrypted_content(
 
     let encryptor = age::Encryptor::with_recipients(recipients.into_iter())?;
 
-    let content = std::fs::read(file).map_err(|err| ReadFileError {
-        path: file.clone(),
-        source: err,
-    })?;
-
     let mut decryptor = encryptor.wrap_output(age::armor::ArmoredWriter::wrap_output(
         &mut encrypted_content,
         format,
     )?)?;
-    decryptor.write_all(&content)?;
+    decryptor.write_all(raw_content)?;
     decryptor.finish().and_then(|armor| armor.finish())?;
 
     Ok(encrypted_content)
@@ -200,7 +194,13 @@ fn begin_encrypt_files(ctx: &Context, files: &[&RawConfigFile]) -> Result<(), Cm
             age::armor::Format::Binary
         };
 
-        let encrypted_content = get_encrypted_content(&file.src, recipient_refs, format)?;
+        let encrypted_content = {
+            let encrypted_content = std::fs::read(&file.src).map_err(|err| ReadFileError {
+                path: file.src.clone(),
+                source: err,
+            })?;
+            get_encrypted_content(&encrypted_content, recipient_refs, format)?
+        };
 
         // Write to encrypted file
         std::fs::write(&file.out, &encrypted_content).map_err(|err| WriteFileError {
@@ -224,7 +224,13 @@ fn begin_decrypt_files(
 ) -> Result<(), CmdError> {
     for file in files {
         // Todo: Check for file existence, if does not exist,
-        let decrypted_content = get_decrypted_content(&file.out, &identities)?;
+        let decrypted_content = {
+            let encrypted_content = std::fs::read(&file.out).map_err(|err| ReadFileError {
+                path: file.out.clone(),
+                source: err,
+            })?;
+            get_decrypted_content(&encrypted_content, &identities)?
+        };
 
         std::fs::write(&file.src, &decrypted_content).map_err(|err| WriteFileError {
             path: file.src.clone(),
@@ -277,7 +283,7 @@ fn confirm_action(files: &[&RawConfigFile], action: Action) -> bool {
 }
 
 fn get_identities(
-    identity_files: &Vec<PathBuf>,
+    identity_files: &[PathBuf],
 ) -> Result<Vec<Box<dyn age::Identity>>, age::cli_common::ReadError> {
     let mut stdin_guard = age::cli_common::StdinGuard::new(true);
 
@@ -295,6 +301,31 @@ fn get_identities(
     )?;
 
     Ok(dyn_identities)
+}
+
+fn convert_str_to_cmd(cmd_str: &str) -> (PathBuf, Vec<String>) {
+    let mut args = cmd_str.split_ascii_whitespace();
+
+    (
+        args.next().unwrap().into(),
+        args.map(String::from).collect(),
+    )
+}
+
+fn get_ragers_editor() -> Option<PathBuf> {
+    let env_var = std::env::var_os("RAGERS_EDITOR");
+
+    env_var.as_ref()?;
+
+    let unwraped_env_var = env_var.unwrap();
+    if unwraped_env_var.is_empty() {
+        return None;
+    };
+
+    let (cmd, _) = convert_str_to_cmd(&unwraped_env_var.into_string().ok()?);
+    let full_cmd = which(cmd).ok()?;
+
+    Some(full_cmd)
 }
 
 pub fn encrypt(ctx: &Context, files_to_encrypt: &Option<Vec<PathBuf>>) -> Result<(), CmdError> {
@@ -380,10 +411,10 @@ pub fn edit(
 
     let is_encrypted = find_comparable_path_single(&matched_file.out, file_to_edit)?;
     let file_path = if is_encrypted {
-        println!("matching against an encrypted file");
+        println!("info: matching against an encrypted file");
         &matched_file.out
     } else {
-        println!("matching against a source file");
+        println!("info: matching against a source file");
         &matched_file.src
     };
 
@@ -392,7 +423,12 @@ pub fn edit(
             let identities_struct = get_identities(&identities.identities_file)?;
             let final_identities: Vec<&dyn age::Identity> =
                 identities_struct.iter().map(|i| i.as_ref()).collect();
-            get_decrypted_content(file_path, &final_identities)?
+
+            let encrypted_content = fs::read(file_path).map_err(|err| ReadFileError {
+                path: file_path.clone(),
+                source: err,
+            })?;
+            get_decrypted_content(&encrypted_content, &final_identities)?
         } else {
             fs::read(file_path).map_err(|err| ReadFileError {
                 path: file_path.clone(),
@@ -400,6 +436,62 @@ pub fn edit(
             })?
         }
     };
+    let file_content_str = String::from_utf8(file_content).map_err(|_| {
+        CmdError::IO(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("'{}' could not be converted to utf8", file_path.display()),
+        ))
+    })?;
 
+    let suffix = matched_file
+        .src
+        .extension()
+        .map_or(".txt".to_owned(), |e| format!(".{}", e.to_string_lossy()));
+    // .unwrap_or_else(|| OsStr::new(".txt"))
+    // .to_string_lossy();
+
+    // Open editor
+    let ragers_editor = get_ragers_editor();
+
+    let mut editor = inquire::Editor::new("your file can be edited in your editor:")
+        .with_file_extension(&suffix)
+        .with_predefined_text(&file_content_str);
+
+    if let Some(editor_command) = &ragers_editor {
+        editor = editor.with_editor_command(editor_command.as_os_str());
+    }
+
+    let new_content = editor.prompt().unwrap();
+
+    match is_encrypted {
+        false => fs::write(file_path, new_content.as_bytes()).map_err(|err| WriteFileError {
+            path: file_path.clone(),
+            source: err,
+        })?,
+        true => {
+            let encrypted_content = {
+                let format = if matched_file.armor {
+                    age::armor::Format::AsciiArmor
+                } else {
+                    age::armor::Format::Binary
+                };
+                let mut stdin_guard = ctx.stdin_guard.borrow_mut();
+
+                let recipients = ctx
+                    .recipients_factory
+                    .obtain_for_file(matched_file, &mut stdin_guard)?;
+                let recipients_ref = recipients.iter().map(|r| r.as_ref()).collect_vec();
+
+                get_encrypted_content(&new_content.into_bytes(), recipients_ref, format)
+            }?;
+
+            std::fs::write(&matched_file.out, &encrypted_content).map_err(|err| WriteFileError {
+                path: matched_file.out.clone(),
+                source: err,
+            })?;
+
+            println!("info: new content has been saved in out (encrypted) file")
+        }
+    }
     Ok(())
 }

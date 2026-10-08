@@ -16,8 +16,8 @@ publish = false
 age = { version = "0.11.3", features = ["armor", "cli-common", "ssh"] }
 clap = { version = "4.6.1", features = ["cargo", "derive", "env"] }
 config = { version = "0.15.25", features = ["yaml"] }
-inquire = "0.9.4"
+inquire = { version = "0.9.4", features = ["editor"] }
 itertools = "0.15.0"
-open-editor = "1.2.0"
 serde = { version = "1.0.228", features = ["serde_derive"] }
 thiserror = { version = "2.0.19", features = ["std"] }
+which = "8.0.6"

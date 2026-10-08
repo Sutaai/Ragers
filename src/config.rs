@@ -56,7 +56,7 @@ impl RawConfig {
     pub fn new(config_path: &Path) -> Result<Self, ConfigError> {
         let builder = config::Config::builder().add_source(config::File::from(config_path));
 
-        return RawConfig::new_from_builder(builder);
+        RawConfig::new_from_builder(builder)
     }
 
     /// Builds the config directly from a [`config::ConfigBuilder`]. This allow for extra tweaking
