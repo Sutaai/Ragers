@@ -1,10 +1,7 @@
 use std::{fs, path::PathBuf};
 
 use crate::{
-    cli::{Action, confirm_action, find_comparable_path, get_encrypted_content},
-    config::RawConfigFile,
-    context::Context,
-    error::{CmdError, DeleteFileError, ReadFileError, WriteFileError},
+    cli::{Action, confirm_action, find_comparable_path, get_encrypted_content}, config::{AsArmorFormat, RawConfigFile}, context::Context, error::{CmdError, DeleteFileError, ReadFileError, WriteFileError},
 };
 
 fn begin_encrypt_files(ctx: &Context, files: &[&RawConfigFile]) -> Result<(), CmdError> {
@@ -19,19 +16,12 @@ fn begin_encrypt_files(ctx: &Context, files: &[&RawConfigFile]) -> Result<(), Cm
         let recipient_refs: Vec<&dyn age::Recipient> =
             recipients.iter().map(|r| r.as_ref()).collect();
 
-        // Configure age's encryptor
-        let format = if file.armor {
-            age::armor::Format::AsciiArmor
-        } else {
-            age::armor::Format::Binary
-        };
-
         let encrypted_content = {
             let encrypted_content = std::fs::read(&file.src).map_err(|err| ReadFileError {
                 path: file.src.clone(),
                 source: err,
             })?;
-            get_encrypted_content(&encrypted_content, recipient_refs, format)?
+            get_encrypted_content(&encrypted_content, recipient_refs, file.armor.as_armor_format())?
         };
 
         // Write to encrypted file

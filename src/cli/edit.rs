@@ -6,9 +6,7 @@ use crate::{
     cli::{
         IdentityArgs, find_comparable_path_single, get_decrypted_content, get_encrypted_content,
         get_identities, get_ragers_editor,
-    },
-    context::Context,
-    error::{CmdError, ReadFileError, WriteFileError},
+    }, config::AsArmorFormat, context::Context, error::{CmdError, ReadFileError, WriteFileError},
 };
 
 pub fn edit(
@@ -91,11 +89,6 @@ pub fn edit(
         })?,
         true => {
             let encrypted_content = {
-                let format = if matched_file.armor {
-                    age::armor::Format::AsciiArmor
-                } else {
-                    age::armor::Format::Binary
-                };
                 let mut stdin_guard = ctx.stdin_guard.borrow_mut();
 
                 let recipients = ctx
@@ -103,7 +96,7 @@ pub fn edit(
                     .obtain_for_file(matched_file, &mut stdin_guard)?;
                 let recipients_ref = recipients.iter().map(|r| r.as_ref()).collect_vec();
 
-                get_encrypted_content(&new_content.into_bytes(), recipients_ref, format)
+                get_encrypted_content(&new_content.into_bytes(), recipients_ref, matched_file.armor.as_armor_format())
             }?;
 
             std::fs::write(&matched_file.out, &encrypted_content).map_err(|err| {
