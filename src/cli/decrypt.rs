@@ -2,13 +2,35 @@ use std::{fs, path::PathBuf};
 
 use crate::{
     cli::{
-        Action, IdentityArgs, confirm_action, find_comparable_path, get_decrypted_content,
-        get_identities,
+        Action, IdentityArgs, confirm_action, get_decrypted_content, get_identities,
+        obtain_files_to_process,
     },
     config::RawConfigFile,
     context::Context,
     error::{CmdError, DeleteFileError, ReadFileError, WriteFileError},
 };
+
+pub fn decrypt(
+    ctx: &Context,
+    files_to_decrypt: &Option<Vec<PathBuf>>,
+    identities: &IdentityArgs,
+) -> Result<(), CmdError> {
+    let to_process_files: Vec<&RawConfigFile> = obtain_files_to_process(ctx, files_to_decrypt);
+
+    if to_process_files.is_empty() {
+        return Err(CmdError::NoFilesToProcess);
+    }
+
+    let identities_struct = get_identities(&identities.identities_file)?;
+    let identities: Vec<&dyn age::Identity> =
+        identities_struct.iter().map(|i| i.as_ref()).collect();
+
+    if confirm_action(&to_process_files, Action::Decryption) {
+        begin_decrypt_files(&to_process_files, identities)?
+    };
+
+    Ok(())
+}
 
 fn begin_decrypt_files(
     files: &[&RawConfigFile],
@@ -35,41 +57,6 @@ fn begin_decrypt_files(
             source: err,
         })?;
     }
-
-    Ok(())
-}
-
-pub fn decrypt(
-    ctx: &Context,
-    files_to_decrypt: &Option<Vec<PathBuf>>,
-    identities: &IdentityArgs,
-) -> Result<(), CmdError> {
-    let to_process_files: Vec<&RawConfigFile> = match files_to_decrypt {
-        None => ctx.config.files.iter().collect(),
-        Some(requested) => ctx
-            .config
-            .files
-            .iter()
-            .filter(|cfg| {
-                find_comparable_path(&cfg.out, requested)
-                    .ok()
-                    .flatten()
-                    .is_some()
-            })
-            .collect(),
-    };
-
-    if to_process_files.is_empty() {
-        return Err(CmdError::NoFilesToProcess);
-    }
-
-    let identities_struct = get_identities(&identities.identities_file)?;
-    let identities: Vec<&dyn age::Identity> =
-        identities_struct.iter().map(|i| i.as_ref()).collect();
-
-    if confirm_action(&to_process_files, Action::Decryption) {
-        begin_decrypt_files(&to_process_files, identities)?
-    };
 
     Ok(())
 }

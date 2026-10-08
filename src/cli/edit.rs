@@ -4,9 +4,12 @@ use itertools::Itertools;
 
 use crate::{
     cli::{
-        IdentityArgs, find_comparable_path_single, get_decrypted_content, get_encrypted_content,
-        get_identities, get_ragers_editor,
-    }, config::AsArmorFormat, context::Context, error::{CmdError, ReadFileError, WriteFileError},
+        IdentityArgs, get_decrypted_content, get_encrypted_content, get_identities,
+        get_ragers_editor, is_same_path,
+    },
+    config::AsArmorFormat,
+    context::Context,
+    error::{CmdError, ReadFileError, WriteFileError},
 };
 
 pub fn edit(
@@ -19,16 +22,12 @@ pub fn edit(
         .files
         .iter()
         .find(|cfg| {
-            find_comparable_path_single(&cfg.src, file_to_edit)
-                .ok()
-                .is_some()
-                || find_comparable_path_single(&cfg.out, file_to_edit)
-                    .ok()
-                    .is_some()
+            is_same_path(&cfg.src, file_to_edit).ok().is_some()
+                || is_same_path(&cfg.out, file_to_edit).ok().is_some()
         })
         .ok_or(CmdError::NoFilesToProcess)?;
 
-    let is_encrypted = find_comparable_path_single(&matched_file.out, file_to_edit)?;
+    let is_encrypted = is_same_path(&matched_file.out, file_to_edit)?;
     let file_path = if is_encrypted {
         println!("info: matching against an encrypted file");
         &matched_file.out
@@ -96,7 +95,11 @@ pub fn edit(
                     .obtain_for_file(matched_file, &mut stdin_guard)?;
                 let recipients_ref = recipients.iter().map(|r| r.as_ref()).collect_vec();
 
-                get_encrypted_content(&new_content.into_bytes(), recipients_ref, matched_file.armor.as_armor_format())
+                get_encrypted_content(
+                    &new_content.into_bytes(),
+                    recipients_ref,
+                    matched_file.armor.as_armor_format(),
+                )
             }?;
 
             std::fs::write(&matched_file.out, &encrypted_content).map_err(|err| {

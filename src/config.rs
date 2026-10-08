@@ -52,14 +52,14 @@ pub trait AsArmorFormat {
     /// Returns the corresponding [`age::armor::Format`] based on the value we have.
     /// If this is [`true`], then [`age::armor::Format::AsciiArmor`] is returned. Else,
     /// [`age::armor::Format::Binary`] is returned.
-    /// 
+    ///
     /// This is the equivalent of making an if check and returning the corresponding format.
-    fn as_armor_format(self) -> age::armor::Format;
+    fn as_armor_format(&self) -> age::armor::Format;
 }
 
 impl AsArmorFormat for bool {
-    fn as_armor_format(self) -> age::armor::Format {
-        if self {
+    fn as_armor_format(&self) -> age::armor::Format {
+        if *self {
             age::armor::Format::AsciiArmor
         } else {
             age::armor::Format::Binary

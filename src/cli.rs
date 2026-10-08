@@ -1,5 +1,4 @@
 use std::{
-    borrow::Borrow,
     fmt::Display,
     io::{Read, Write},
     path::{Path, PathBuf},
@@ -12,9 +11,8 @@ use which::which;
 
 use crate::{
     config::RawConfigFile,
-    error::{
-        DecryptionError, EncryptionError
-    },
+    context::Context,
+    error::{DecryptionError, EncryptionError},
 };
 
 mod decrypt;
@@ -22,9 +20,8 @@ mod edit;
 mod encrypt;
 
 pub use self::decrypt::decrypt;
-pub use self::encrypt::encrypt;
 pub use self::edit::edit;
-
+pub use self::encrypt::encrypt;
 
 #[derive(Parser)]
 #[command(name = "ragers", version, about, next_line_help = true)]
@@ -111,31 +108,41 @@ pub struct IdentityArgs {
     pub identities_file: Vec<PathBuf>,
 }
 
-/// Given a list of path, attempt to find a path that is comparable to the given path.
-fn find_comparable_path<'path, P: Borrow<PathBuf> + AsRef<Path>>(
-    path: &PathBuf,
-    list: &'path [P],
-) -> Result<Option<&'path P>, std::io::Error> {
-    let full_path = std::path::absolute(path)?;
-
-    for listed_path in list {
-        let compare_path = std::path::absolute(listed_path)?;
-        if full_path == compare_path {
-            return Ok(Some(listed_path));
-        }
+fn obtain_files_to_process<'ctx>(
+    ctx: &'ctx Context,
+    requested_files: &Option<Vec<PathBuf>>,
+) -> Vec<&'ctx RawConfigFile> {
+    match requested_files {
+        None => ctx.config.files.iter().collect(),
+        Some(requested) => ctx
+            .config
+            .files
+            .iter()
+            .filter(|config_file| {
+                for one_requested_path in requested {
+                    if is_same_path(one_requested_path, &config_file.src)
+                        .ok()
+                        .is_some()
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            })
+            .collect(),
     }
-
-    Ok(None)
 }
 
-fn find_comparable_path_single<P: Borrow<PathBuf> + AsRef<Path>>(
-    path_one: P,
-    path_two: P,
-) -> Result<bool, std::io::Error> {
-    let full_path_one = std::path::absolute(path_one)?;
-    let full_path_two = std::path::absolute(path_two)?;
+/// Compares two path and attempt to check if they are pointing to the same file.
+///
+/// This will compares the two paths using their absolute representation, ensuring that a different current directory
+/// won't be an issue while making the check.
+fn is_same_path<P: AsRef<Path>>(path_one: P, path_two: P) -> Result<bool, std::io::Error> {
+    // https://ibb.co/TqdmZBYJ
+    let absolute_path_one = std::path::absolute(path_one)?;
+    let absolute_path_two = std::path::absolute(path_two)?;
 
-    if full_path_one == full_path_two {
+    if absolute_path_one == absolute_path_two {
         return Ok(true);
     }
 
