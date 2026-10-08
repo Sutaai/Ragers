@@ -92,19 +92,9 @@ pub enum RecipientsFactoryError {
     Io(#[from] std::io::Error),
 }
 
-#[derive(Debug, Error)]
-#[error("could not read \"{path}\": {source}")]
-pub struct ReadFileError {
-    pub path: PathBuf,
-    pub source: std::io::Error,
-}
-
 
 #[derive(Debug, Error)]
 pub enum DecryptionError {
-    #[error(transparent)]
-    ReadFile(#[from] ReadFileError),
-
     // #[error(transparent)]
     #[error("decryption error: {0}")]
     AgeDecrypt(#[from] age::DecryptError),
@@ -112,9 +102,6 @@ pub enum DecryptionError {
 
 #[derive(Debug, Error)]
 pub enum EncryptionError {
-    #[error(transparent)]
-    ReadFile(#[from] ReadFileError),
-
     // #[error(transparent)]
     #[error("encryption error: {0}")]
     AgeEncrypt(#[from] age::EncryptError),
