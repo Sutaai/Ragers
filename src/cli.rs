@@ -1,9 +1,8 @@
 use std::{
     borrow::Borrow,
     fmt::Display,
-    fs,
     io::{Read, Write},
-    path::{Path, PathBuf}
+    path::{Path, PathBuf},
 };
 
 use clap::{Args, Parser, Subcommand};
@@ -13,11 +12,19 @@ use which::which;
 
 use crate::{
     config::RawConfigFile,
-    context::Context,
     error::{
-        CmdError, DecryptionError, DeleteFileError, EncryptionError, ReadFileError, WriteFileError,
+        DecryptionError, EncryptionError
     },
 };
+
+mod decrypt;
+mod edit;
+mod encrypt;
+
+pub use self::decrypt::decrypt;
+pub use self::encrypt::encrypt;
+pub use self::edit::edit;
+
 
 #[derive(Parser)]
 #[command(name = "ragers", version, about, next_line_help = true)]
@@ -175,78 +182,6 @@ fn get_encrypted_content(
     Ok(encrypted_content)
 }
 
-fn begin_encrypt_files(ctx: &Context, files: &[&RawConfigFile]) -> Result<(), CmdError> {
-    let mut stdin_guard = ctx.stdin_guard.borrow_mut();
-
-    for file in files {
-        // Todo: Check for file existence, if does not exist,
-        let recipients = ctx
-            .recipients_factory
-            .obtain_for_file(file, &mut stdin_guard)?;
-
-        let recipient_refs: Vec<&dyn age::Recipient> =
-            recipients.iter().map(|r| r.as_ref()).collect();
-
-        // Configure age's encryptor
-        let format = if file.armor {
-            age::armor::Format::AsciiArmor
-        } else {
-            age::armor::Format::Binary
-        };
-
-        let encrypted_content = {
-            let encrypted_content = std::fs::read(&file.src).map_err(|err| ReadFileError {
-                path: file.src.clone(),
-                source: err,
-            })?;
-            get_encrypted_content(&encrypted_content, recipient_refs, format)?
-        };
-
-        // Write to encrypted file
-        std::fs::write(&file.out, &encrypted_content).map_err(|err| WriteFileError {
-            path: file.src.clone(),
-            source: err,
-        })?;
-
-        // This should only be done after all files have been encrypted
-        fs::remove_file(&file.src).map_err(|err| DeleteFileError {
-            path: file.src.clone(),
-            source: err,
-        })?;
-    }
-
-    Ok(())
-}
-
-fn begin_decrypt_files(
-    files: &[&RawConfigFile],
-    identities: Vec<&dyn age::Identity>,
-) -> Result<(), CmdError> {
-    for file in files {
-        // Todo: Check for file existence, if does not exist,
-        let decrypted_content = {
-            let encrypted_content = std::fs::read(&file.out).map_err(|err| ReadFileError {
-                path: file.out.clone(),
-                source: err,
-            })?;
-            get_decrypted_content(&encrypted_content, &identities)?
-        };
-
-        std::fs::write(&file.src, &decrypted_content).map_err(|err| WriteFileError {
-            path: file.src.clone(),
-            source: err,
-        })?;
-
-        // This should only be done after all files have been decrypted
-        fs::remove_file(&file.out).map_err(|err| DeleteFileError {
-            path: file.out.clone(),
-            source: err,
-        })?;
-    }
-
-    Ok(())
-}
-
 enum Action {
     Encryption,
     Decryption,
@@ -326,172 +261,4 @@ fn get_ragers_editor() -> Option<PathBuf> {
     let full_cmd = which(cmd).ok()?;
 
     Some(full_cmd)
-}
-
-pub fn encrypt(ctx: &Context, files_to_encrypt: &Option<Vec<PathBuf>>) -> Result<(), CmdError> {
-    let to_process_files: Vec<&RawConfigFile> = match files_to_encrypt {
-        None => ctx.config.files.iter().collect(),
-        Some(requested) => ctx
-            .config
-            .files
-            .iter()
-            .filter(|cfg| {
-                find_comparable_path(&cfg.src, requested)
-                    .ok()
-                    .flatten()
-                    .is_some()
-            })
-            .collect(),
-    };
-
-    if to_process_files.is_empty() {
-        return Err(CmdError::NoFilesToProcess);
-    }
-
-    if confirm_action(&to_process_files, Action::Encryption) {
-        begin_encrypt_files(ctx, &to_process_files)?
-    };
-
-    Ok(())
-}
-
-pub fn decrypt(
-    ctx: &Context,
-    files_to_decrypt: &Option<Vec<PathBuf>>,
-    identities: &IdentityArgs,
-) -> Result<(), CmdError> {
-    let to_process_files: Vec<&RawConfigFile> = match files_to_decrypt {
-        None => ctx.config.files.iter().collect(),
-        Some(requested) => ctx
-            .config
-            .files
-            .iter()
-            .filter(|cfg| {
-                find_comparable_path(&cfg.out, requested)
-                    .ok()
-                    .flatten()
-                    .is_some()
-            })
-            .collect(),
-    };
-
-    if to_process_files.is_empty() {
-        return Err(CmdError::NoFilesToProcess);
-    }
-
-    let identities_struct = get_identities(&identities.identities_file)?;
-    let identities: Vec<&dyn age::Identity> =
-        identities_struct.iter().map(|i| i.as_ref()).collect();
-
-    if confirm_action(&to_process_files, Action::Decryption) {
-        begin_decrypt_files(&to_process_files, identities)?
-    };
-
-    Ok(())
-}
-
-pub fn edit(
-    ctx: &Context,
-    file_to_edit: &PathBuf,
-    identities: &IdentityArgs,
-) -> Result<(), CmdError> {
-    let matched_file = ctx
-        .config
-        .files
-        .iter()
-        .find(|cfg| {
-            find_comparable_path_single(&cfg.src, file_to_edit)
-                .ok()
-                .is_some()
-                || find_comparable_path_single(&cfg.out, file_to_edit)
-                    .ok()
-                    .is_some()
-        })
-        .ok_or(CmdError::NoFilesToProcess)?;
-
-    let is_encrypted = find_comparable_path_single(&matched_file.out, file_to_edit)?;
-    let file_path = if is_encrypted {
-        println!("info: matching against an encrypted file");
-        &matched_file.out
-    } else {
-        println!("info: matching against a source file");
-        &matched_file.src
-    };
-
-    let file_content = {
-        if is_encrypted {
-            let identities_struct = get_identities(&identities.identities_file)?;
-            let final_identities: Vec<&dyn age::Identity> =
-                identities_struct.iter().map(|i| i.as_ref()).collect();
-
-            let encrypted_content = fs::read(file_path).map_err(|err| ReadFileError {
-                path: file_path.clone(),
-                source: err,
-            })?;
-            get_decrypted_content(&encrypted_content, &final_identities)?
-        } else {
-            fs::read(file_path).map_err(|err| ReadFileError {
-                path: file_path.clone(),
-                source: err,
-            })?
-        }
-    };
-    let file_content_str = String::from_utf8(file_content).map_err(|_| {
-        CmdError::IO(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            format!("'{}' could not be converted to utf8", file_path.display()),
-        ))
-    })?;
-
-    let suffix = matched_file
-        .src
-        .extension()
-        .map_or(".txt".to_owned(), |e| format!(".{}", e.to_string_lossy()));
-    // .unwrap_or_else(|| OsStr::new(".txt"))
-    // .to_string_lossy();
-
-    // Open editor
-    let ragers_editor = get_ragers_editor();
-
-    let mut editor = inquire::Editor::new("your file can be edited in your editor:")
-        .with_file_extension(&suffix)
-        .with_predefined_text(&file_content_str);
-
-    if let Some(editor_command) = &ragers_editor {
-        editor = editor.with_editor_command(editor_command.as_os_str());
-    }
-
-    let new_content = editor.prompt().unwrap();
-
-    match is_encrypted {
-        false => fs::write(file_path, new_content.as_bytes()).map_err(|err| WriteFileError {
-            path: file_path.clone(),
-            source: err,
-        })?,
-        true => {
-            let encrypted_content = {
-                let format = if matched_file.armor {
-                    age::armor::Format::AsciiArmor
-                } else {
-                    age::armor::Format::Binary
-                };
-                let mut stdin_guard = ctx.stdin_guard.borrow_mut();
-
-                let recipients = ctx
-                    .recipients_factory
-                    .obtain_for_file(matched_file, &mut stdin_guard)?;
-                let recipients_ref = recipients.iter().map(|r| r.as_ref()).collect_vec();
-
-                get_encrypted_content(&new_content.into_bytes(), recipients_ref, format)
-            }?;
-
-            std::fs::write(&matched_file.out, &encrypted_content).map_err(|err| WriteFileError {
-                path: matched_file.out.clone(),
-                source: err,
-            })?;
-
-            println!("info: new content has been saved in out (encrypted) file")
-        }
-    }
-    Ok(())
 }
