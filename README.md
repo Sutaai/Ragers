@@ -21,12 +21,6 @@ This tool is currently English only.
 
 Only standard age X55219 and SSH (recipient-based) encryption will be supported.
 
-### ETA:
-
-<video width="512" controls>
-  <source src="./.codeberg/no_eta.mp4" type="video/mp4">
-</video>
-
 ---
 
 > [!CAUTION]
