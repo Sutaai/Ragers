@@ -127,7 +127,7 @@ fn obtain_files_to_process<'ctx>(
                         return true;
                     }
                 }
-                return false;
+                false
             })
             .collect(),
     }
@@ -266,12 +266,9 @@ fn get_ragers_editor() -> Option<PathBuf> {
 
     let (cmd, _) = convert_str_to_cmd(&env_var_str);
 
-    which(cmd).map_err(|err| {
-        match err {
-            which::Error::CannotFindBinaryPath => {
-                println!("warning: cannot find path to binary for 'RAGERS_EDITOR={env_var_str}' variable. attempting to use your default editor")
-            },
-            _ => {},
+    which(cmd).inspect_err(|&err| {
+        if err == which::Error::CannotFindBinaryPath {
+            println!("warning: cannot find path to binary for 'RAGERS_EDITOR={env_var_str}' variable. attempting to use your default editor")
         }
     }).ok()
 }
