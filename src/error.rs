@@ -173,4 +173,7 @@ pub enum CmdError {
     /// Returned when the age library is unable to parse one of it's struct
     #[error("could not parse recipient or identity: {0}")]
     AgeReadError(#[from] age::cli_common::ReadError),
+
+    // #[error("unexpected error while running program: {0}")]
+    // UnknownError(#[source] Box<dyn std::error::Error>),
 }

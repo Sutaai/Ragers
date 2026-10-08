@@ -259,13 +259,19 @@ fn get_ragers_editor() -> Option<PathBuf> {
 
     env_var.as_ref()?;
 
-    let unwraped_env_var = env_var.unwrap();
-    if unwraped_env_var.is_empty() {
+    let env_var_str = env_var.unwrap().into_string().ok()?;
+    if env_var_str.is_empty() {
         return None;
     };
 
-    let (cmd, _) = convert_str_to_cmd(&unwraped_env_var.into_string().ok()?);
-    let full_cmd = which(cmd).ok()?;
+    let (cmd, _) = convert_str_to_cmd(&env_var_str);
 
-    Some(full_cmd)
+    which(cmd).map_err(|err| {
+        match err {
+            which::Error::CannotFindBinaryPath => {
+                println!("warning: cannot find path to binary for 'RAGERS_EDITOR={env_var_str}' variable. attempting to use your default editor")
+            },
+            _ => {},
+        }
+    }).ok()
 }
