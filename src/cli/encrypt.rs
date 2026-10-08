@@ -4,7 +4,7 @@ use crate::{
     cli::{Action, confirm_action, get_encrypted_content, obtain_files_to_process},
     config::{AsArmorFormat, RawConfigFile},
     context::Context,
-    error::{CmdError, DeleteFileError, ReadFileError, WriteFileError},
+    error::{CmdError},
 };
 
 pub fn encrypt(ctx: &Context, files_to_encrypt: &Option<Vec<PathBuf>>) -> Result<(), CmdError> {
@@ -34,10 +34,7 @@ fn begin_encrypt_files(ctx: &Context, files: &[&RawConfigFile]) -> Result<(), Cm
             recipients.iter().map(|r| r.as_ref()).collect();
 
         let encrypted_content = {
-            let encrypted_content = std::fs::read(&file.src).map_err(|err| ReadFileError {
-                path: file.src.clone(),
-                source: err,
-            })?;
+            let encrypted_content = std::fs::read(&file.src)?;
             get_encrypted_content(
                 &encrypted_content,
                 recipient_refs,
@@ -46,16 +43,10 @@ fn begin_encrypt_files(ctx: &Context, files: &[&RawConfigFile]) -> Result<(), Cm
         };
 
         // Write to encrypted file
-        std::fs::write(&file.out, &encrypted_content).map_err(|err| WriteFileError {
-            path: file.src.clone(),
-            source: err,
-        })?;
+        std::fs::write(&file.out, &encrypted_content)?;
 
         // This should only be done after all files have been encrypted
-        fs::remove_file(&file.src).map_err(|err| DeleteFileError {
-            path: file.src.clone(),
-            source: err,
-        })?;
+        fs::remove_file(&file.src)?;
     }
 
     Ok(())

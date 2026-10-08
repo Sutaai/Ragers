@@ -99,19 +99,6 @@ pub struct ReadFileError {
     pub source: std::io::Error,
 }
 
-#[derive(Debug, Error)]
-#[error("could not write at \"{path}\": {source}")]
-pub struct WriteFileError {
-    pub path: PathBuf,
-    pub source: std::io::Error,
-}
-
-#[derive(Debug, Error)]
-#[error("could not delete file at \"{path}\": {source}")]
-pub struct DeleteFileError {
-    pub path: PathBuf,
-    pub source: std::io::Error,
-}
 
 #[derive(Debug, Error)]
 pub enum DecryptionError {
@@ -146,15 +133,6 @@ pub enum CmdError {
     /// Returned when there is an underlying issue with the config file
     #[error(transparent)]
     Config(#[from] ConfigError),
-
-    #[error(transparent)]
-    ReadFile(#[from] ReadFileError),
-
-    #[error(transparent)]
-    WriteFile(#[from] WriteFileError),
-
-    #[error(transparent)]
-    DeleteFile(#[from] DeleteFileError),
 
     /// Returned when the recipients factory has had an issue
     #[error(transparent)]

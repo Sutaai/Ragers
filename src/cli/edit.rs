@@ -9,7 +9,7 @@ use crate::{
     },
     config::AsArmorFormat,
     context::Context,
-    error::{CmdError, ReadFileError, WriteFileError},
+    error::{CmdError},
 };
 
 pub fn edit(
@@ -42,16 +42,10 @@ pub fn edit(
             let final_identities: Vec<&dyn age::Identity> =
                 identities_struct.iter().map(|i| i.as_ref()).collect();
 
-            let encrypted_content = fs::read(file_path).map_err(|err| ReadFileError {
-                path: file_path.clone(),
-                source: err,
-            })?;
+            let encrypted_content = fs::read(file_path)?;
             get_decrypted_content(&encrypted_content, &final_identities)?
         } else {
-            fs::read(file_path).map_err(|err| ReadFileError {
-                path: file_path.clone(),
-                source: err,
-            })?
+            fs::read(file_path)?
         }
     };
     let file_content_str = String::from_utf8(file_content).map_err(|_| {
@@ -82,10 +76,7 @@ pub fn edit(
     let new_content = editor.prompt().unwrap();
 
     match is_encrypted {
-        false => fs::write(file_path, new_content.as_bytes()).map_err(|err| WriteFileError {
-            path: file_path.clone(),
-            source: err,
-        })?,
+        false => fs::write(file_path, new_content.as_bytes())?,
         true => {
             let encrypted_content = {
                 let mut stdin_guard = ctx.stdin_guard.borrow_mut();
@@ -102,14 +93,7 @@ pub fn edit(
                 )
             }?;
 
-            std::fs::write(&matched_file.out, &encrypted_content).map_err(|err| {
-                WriteFileError {
-                    path: matched_file.out.clone(),
-                    source: err,
-                }
-            })?;
-
-            println!("info: new content has been saved in out (encrypted) file")
+            std::fs::write(&matched_file.out, &encrypted_content)?;
         }
     }
     Ok(())

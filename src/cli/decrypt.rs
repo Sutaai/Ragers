@@ -7,7 +7,7 @@ use crate::{
     },
     config::RawConfigFile,
     context::Context,
-    error::{CmdError, DeleteFileError, ReadFileError, WriteFileError},
+    error::{CmdError},
 };
 
 pub fn decrypt(
@@ -39,23 +39,14 @@ fn begin_decrypt_files(
     for file in files {
         // Todo: Check for file existence, if does not exist,
         let decrypted_content = {
-            let encrypted_content = std::fs::read(&file.out).map_err(|err| ReadFileError {
-                path: file.out.clone(),
-                source: err,
-            })?;
+            let encrypted_content = std::fs::read(&file.out)?;
             get_decrypted_content(&encrypted_content, &identities)?
         };
 
-        std::fs::write(&file.src, &decrypted_content).map_err(|err| WriteFileError {
-            path: file.src.clone(),
-            source: err,
-        })?;
+        std::fs::write(&file.src, &decrypted_content)?;
 
         // This should only be done after all files have been decrypted
-        fs::remove_file(&file.out).map_err(|err| DeleteFileError {
-            path: file.out.clone(),
-            source: err,
-        })?;
+        fs::remove_file(&file.out)?;
     }
 
     Ok(())
