@@ -1,0 +1,18 @@
+[[repos]]
+repo = "builtin"
+
+hooks = [
+    { id = "trailing-whitespace" },
+    { id = "check-added-large-files" },
+    { id = "check-case-conflict" },
+    { id = "check-illegal-windows-names" },
+    { id = "end-of-file-fixer" },
+    { id = "check-json" },
+    { id = "check-jsonc" },
+    { id = "pretty-format-json", args = ["--autofix", "--indent=2"] },
+    { id = "check-toml" },
+    { id = "check-yaml" },
+    { id = "mixed-line-ending" },
+    { id = "detect-private-key", exclude = "tests/README.md$" },
+    { id = "check-merge-conflict" },
+]
