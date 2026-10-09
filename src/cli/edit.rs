@@ -75,7 +75,7 @@ pub fn edit(
         editor = editor.with_editor_command(editor_command.as_os_str());
     }
 
-    let new_content = editor.prompt().err?;
+    let new_content = editor.prompt()?;
 
     match is_encrypted {
         false => fs::write(file_path, new_content.as_bytes())?,
