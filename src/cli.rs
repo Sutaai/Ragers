@@ -47,7 +47,7 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    #[command(about = "Encrypt files")]
+    #[command(about = "Encrypt one, multiple or all files")]
     Encrypt {
         #[arg(
             help = "Path to file(s) to encrypt. If none are provided, all files defined in config will be encrypted.",
@@ -60,7 +60,7 @@ pub enum Commands {
         files: Option<Vec<PathBuf>>,
     },
 
-    #[command(about = "Decrypt files")]
+    #[command(about = "Decrypt one, multiple or all files")]
     Decrypt {
         #[arg(
             help = "Path to file to decrypt. If none are provided, all files defined in config will be decrypted.",
@@ -76,6 +76,7 @@ pub enum Commands {
         identity: IdentityArgs,
     },
 
+    #[command(about = "Edit a file directly without manual decryption")]
     Edit {
         #[arg(
             help = "Path to file to edit.",

@@ -36,24 +36,24 @@ pub fn edit(
         &matched_file.src
     };
 
-    let file_content = {
-        if is_encrypted {
-            let identities_struct = get_identities(ctx, &identities.identities_file)?;
-            let final_identities: Vec<&dyn age::Identity> =
-                identities_struct.iter().map(|i| i.as_ref()).collect();
-
+    let raw_content = {
+        let buffer = if is_encrypted {
+            let identities = get_identities(ctx, &identities.identities_file)?;
+            let identities_refs: Vec<&dyn age::Identity> =
+                identities.iter().map(|i| i.as_ref()).collect();
             let encrypted_content = fs::read(file_path)?;
-            get_decrypted_content(&encrypted_content, &final_identities)?
+            get_decrypted_content(&encrypted_content, &identities_refs)?
         } else {
             fs::read(file_path)?
-        }
+        };
+
+        String::from_utf8(buffer).map_err(|_| {
+            CmdError::IO(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("'{}' could not be converted to utf8", file_path.display()),
+            ))
+        })?
     };
-    let file_content_str = String::from_utf8(file_content).map_err(|_| {
-        CmdError::IO(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            format!("'{}' could not be converted to utf8", file_path.display()),
-        ))
-    })?;
 
     let suffix = matched_file
         .src
@@ -63,15 +63,19 @@ pub fn edit(
     // Open editor
     let ragers_editor = get_ragers_editor();
 
-    let mut editor = inquire::Editor::new("your file can be edited in your editor:")
+    let filename = format!(
+        "edit {}:",
+        file_path.file_name().and_then(|n| n.to_str()).unwrap_or("?")
+    );
+    let mut editor = inquire::Editor::new(&filename)
         .with_file_extension(&suffix)
-        .with_predefined_text(&file_content_str);
+        .with_predefined_text(&raw_content);
 
     if let Some(editor_command) = &ragers_editor {
         editor = editor.with_editor_command(editor_command.as_os_str());
     }
 
-    let new_content = editor.prompt().unwrap();
+    let new_content = editor.prompt().err?;
 
     match is_encrypted {
         false => fs::write(file_path, new_content.as_bytes())?,
