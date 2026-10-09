@@ -4,15 +4,11 @@ use crate::{
     cli::{Action, confirm_action, get_encrypted_content, obtain_files_to_process},
     config::{AsArmorFormat, RawConfigFile},
     context::Context,
-    error::{CmdError},
+    error::CmdError,
 };
 
 pub fn encrypt(ctx: &Context, files_to_encrypt: &Option<Vec<PathBuf>>) -> Result<(), CmdError> {
-    let to_process_files = obtain_files_to_process(ctx, files_to_encrypt);
-
-    if to_process_files.is_empty() {
-        return Err(CmdError::NoFilesToProcess);
-    }
+    let to_process_files = obtain_files_to_process(ctx, files_to_encrypt)?;
 
     if confirm_action(&to_process_files, Action::Encryption) {
         begin_encrypt_files(ctx, &to_process_files)?

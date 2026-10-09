@@ -9,7 +9,7 @@ use crate::{
     },
     config::AsArmorFormat,
     context::Context,
-    error::{CmdError},
+    error::CmdError,
 };
 
 pub fn edit(
@@ -38,7 +38,7 @@ pub fn edit(
 
     let file_content = {
         if is_encrypted {
-            let identities_struct = get_identities(&identities.identities_file)?;
+            let identities_struct = get_identities(ctx, &identities.identities_file)?;
             let final_identities: Vec<&dyn age::Identity> =
                 identities_struct.iter().map(|i| i.as_ref()).collect();
 
@@ -59,8 +59,6 @@ pub fn edit(
         .src
         .extension()
         .map_or(".txt".to_owned(), |e| format!(".{}", e.to_string_lossy()));
-    // .unwrap_or_else(|| OsStr::new(".txt"))
-    // .to_string_lossy();
 
     // Open editor
     let ragers_editor = get_ragers_editor();

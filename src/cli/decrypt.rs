@@ -7,7 +7,7 @@ use crate::{
     },
     config::RawConfigFile,
     context::Context,
-    error::{CmdError},
+    error::CmdError,
 };
 
 pub fn decrypt(
@@ -15,13 +15,9 @@ pub fn decrypt(
     files_to_decrypt: &Option<Vec<PathBuf>>,
     identities: &IdentityArgs,
 ) -> Result<(), CmdError> {
-    let to_process_files: Vec<&RawConfigFile> = obtain_files_to_process(ctx, files_to_decrypt);
+    let to_process_files: Vec<&RawConfigFile> = obtain_files_to_process(ctx, files_to_decrypt)?;
 
-    if to_process_files.is_empty() {
-        return Err(CmdError::NoFilesToProcess);
-    }
-
-    let identities_struct = get_identities(&identities.identities_file)?;
+    let identities_struct = get_identities(ctx, &identities.identities_file)?;
     let identities: Vec<&dyn age::Identity> =
         identities_struct.iter().map(|i| i.as_ref()).collect();
 

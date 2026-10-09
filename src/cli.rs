@@ -12,7 +12,7 @@ use which::which;
 use crate::{
     config::RawConfigFile,
     context::Context,
-    error::{DecryptionError, EncryptionError},
+    error::{CmdError, DecryptionError, EncryptionError},
 };
 
 mod decrypt;
@@ -108,11 +108,19 @@ pub struct IdentityArgs {
     pub identities_file: Vec<PathBuf>,
 }
 
+/// Filters and returns a vector of files to process based on the requested files from the user.
+///
+/// If `requested_files` is `None`, all files from the context's configuration are returned.
+/// If `requested_files` is `Some`, only the configuration files that match the requested paths
+/// are returned. Path comparison is done using [`is_same_path`].
+///
+/// This may return a [`CmdError`] error variant in the case that there are no files that have
+/// matched the search, or if no files have been configured in the config file.
 fn obtain_files_to_process<'ctx>(
     ctx: &'ctx Context,
     requested_files: &Option<Vec<PathBuf>>,
-) -> Vec<&'ctx RawConfigFile> {
-    match requested_files {
+) -> Result<Vec<&'ctx RawConfigFile>, CmdError> {
+    let files: Vec<&'ctx RawConfigFile> = match requested_files {
         None => ctx.config.files.iter().collect(),
         Some(requested) => ctx
             .config
@@ -130,7 +138,13 @@ fn obtain_files_to_process<'ctx>(
                 false
             })
             .collect(),
+    };
+
+    if files.is_empty() {
+        return Err(CmdError::NoFilesToProcess);
     }
+
+    Ok(files)
 }
 
 /// Compares two path and attempt to check if they are pointing to the same file.
@@ -149,9 +163,13 @@ fn is_same_path<P: AsRef<Path>>(path_one: P, path_two: P) -> Result<bool, std::i
     Ok(false)
 }
 
+/// Attempt to decrypt an encrypted content buffer.
+///
+/// This is a wrapper around [`age`]'s decryption logic, allowing multiple identities to be used
+/// for the decryption process.
+/// In the case the decryption could have not been completed, [`DecryptionError`] is returned.
 fn get_decrypted_content(
     encrypted_content: &[u8],
-    // file: &PathBuf,
     identities: &[&dyn age::Identity],
 ) -> Result<Vec<u8>, DecryptionError> {
     let mut decrypted_content: Vec<u8> = Vec::new();
@@ -169,9 +187,13 @@ fn get_decrypted_content(
     Ok(decrypted_content)
 }
 
+/// Attempt to encrypted a raw content buffer.
+///
+/// This is a wrapper around [`age`]'s encryption logic, allowing encryption using multiple
+/// recipients and to select the according format.
+/// In the case the decryption could have not been completed, [`EncryptionError`] is returned.
 fn get_encrypted_content(
     raw_content: &[u8],
-    // file: &PathBuf,
     recipients: Vec<&dyn age::Recipient>,
     format: age::armor::Format,
 ) -> Result<Vec<u8>, EncryptionError> {
@@ -189,6 +211,7 @@ fn get_encrypted_content(
     Ok(encrypted_content)
 }
 
+/// Simple enum to easily represent if we are either encrypting or decrypting.
 enum Action {
     Encryption,
     Decryption,
@@ -203,6 +226,9 @@ impl Display for Action {
     }
 }
 
+/// Reusable wrapper to request the user if they are confirming encryption/decryption.
+/// This output a list of files that will be processed, request a yes or no from the user, and
+/// return the value to the caller, in which they decide what to do next.
 fn confirm_action(files: &[&RawConfigFile], action: Action) -> bool {
     let files_displayed: String = files
         .iter()
@@ -213,7 +239,7 @@ fn confirm_action(files: &[&RawConfigFile], action: Action) -> bool {
         .join("\n");
 
     let confirm_str = format!(
-        "There are {} files to {action}:\n{}\nProceed with encryption?",
+        "There are {} files to {action}:\n{}\nProceed?",
         files.len(),
         files_displayed
     );
@@ -221,30 +247,38 @@ fn confirm_action(files: &[&RawConfigFile], action: Action) -> bool {
     Confirm::new(&confirm_str)
         .with_default(true)
         .prompt()
-        .expect("Couldn't prompt to user")
+        .expect("couldn't prompt to user")
 }
 
+/// Attempt to read identities from files. Wrapper around [`age::cli_common::read_identities`] to
+/// reused a stdin_guard from context and avoid rewriting logic.
+///
+/// # Warning
+///
+/// This function called for a mutable borrow from [`Context::stdin_guard`]. There shall be no
+/// other mutable borrow made before in order for this function to work. Drop your borrow if
+/// needed.
 fn get_identities(
+    ctx: &Context,
     identity_files: &[PathBuf],
 ) -> Result<Vec<Box<dyn age::Identity>>, age::cli_common::ReadError> {
-    let mut stdin_guard = age::cli_common::StdinGuard::new(true);
+    let mut stdin_guard = ctx.stdin_guard.borrow_mut();
+    let filenames = identity_files
+        .iter()
+        .map(|item| item.to_string_lossy().to_string())
+        .collect::<Vec<String>>();
 
-    let dyn_identities = age::cli_common::read_identities(
-        identity_files
-            .iter()
-            .map(|item| {
-                item.to_str()
-                    .expect("path must be turned to string")
-                    .to_owned()
-            })
-            .collect::<Vec<String>>(),
-        None,
-        &mut stdin_guard,
-    )?;
+    let dyn_identities = age::cli_common::read_identities(filenames, None, &mut stdin_guard)?;
 
     Ok(dyn_identities)
 }
 
+/// Convert a str representation of a command into a tuple of two elements:
+/// - Path to the binary
+/// - Additionnal arguments, if any
+///
+/// While possible, the function shall not panic as long as it is checked that the str is not
+/// empty.
 fn convert_str_to_cmd(cmd_str: &str) -> (PathBuf, Vec<String>) {
     let mut args = cmd_str.split_ascii_whitespace();
 
@@ -254,6 +288,11 @@ fn convert_str_to_cmd(cmd_str: &str) -> (PathBuf, Vec<String>) {
     )
 }
 
+/// Get the path to the ragers editor from the `RAGERS_EDITOR` environment variable, if set.
+///
+/// Returns `None` if the variable is not set or is empty.
+/// In the case that the editor binary path can not be found, `None` is returned and a warning is
+/// printed to alert the user.
 fn get_ragers_editor() -> Option<PathBuf> {
     let env_var = std::env::var_os("RAGERS_EDITOR");
 
