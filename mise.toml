@@ -1,3 +1,4 @@
 [tools]
 age = "1"
+prek = "latest"
 rust = "1.97"
