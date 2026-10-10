@@ -22,28 +22,19 @@ pub fn decrypt(
         identities_struct.iter().map(|i| i.as_ref()).collect();
 
     if confirm_action(&to_process_files, Action::Decryption) {
-        begin_decrypt_files(&to_process_files, identities)?
+        for file in &to_process_files {
+            // Todo: Check for file existence, if does not exist,
+            let decrypted_content = {
+                let encrypted_content = std::fs::read(&file.out)?;
+                get_decrypted_content(&encrypted_content, &identities)?
+            };
+
+            std::fs::write(&file.src, &decrypted_content)?;
+
+            // This should only be done after all files have been decrypted
+            fs::remove_file(&file.out)?;
+        }
     };
-
-    Ok(())
-}
-
-fn begin_decrypt_files(
-    files: &[&RawConfigFile],
-    identities: Vec<&dyn age::Identity>,
-) -> Result<(), CmdError> {
-    for file in files {
-        // Todo: Check for file existence, if does not exist,
-        let decrypted_content = {
-            let encrypted_content = std::fs::read(&file.out)?;
-            get_decrypted_content(&encrypted_content, &identities)?
-        };
-
-        std::fs::write(&file.src, &decrypted_content)?;
-
-        // This should only be done after all files have been decrypted
-        fs::remove_file(&file.out)?;
-    }
 
     Ok(())
 }

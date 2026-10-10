@@ -115,6 +115,9 @@ pub struct IdentityArgs {
 /// If `requested_files` is `Some`, only the configuration files that match the requested paths
 /// are returned. Path comparison is done using [`is_same_path`].
 ///
+/// This function does not check for path existence or does not make any check at all. It only
+/// exists as a filter from the files set in config and what's been requested.
+///
 /// This may return a [`CmdError`] error variant in the case that there are no files that have
 /// matched the search, or if no files have been configured in the config file.
 fn obtain_files_to_process<'ctx>(

@@ -2,7 +2,7 @@ use std::{fs, path::PathBuf};
 
 use crate::{
     cli::{Action, confirm_action, get_encrypted_content, obtain_files_to_process},
-    config::{AsArmorFormat, RawConfigFile},
+    config::{AsArmorFormat},
     context::Context,
     error::CmdError,
 };
@@ -10,17 +10,13 @@ use crate::{
 pub fn encrypt(ctx: &Context, files_to_encrypt: &Option<Vec<PathBuf>>) -> Result<(), CmdError> {
     let to_process_files = obtain_files_to_process(ctx, files_to_encrypt)?;
 
-    if confirm_action(&to_process_files, Action::Encryption) {
-        begin_encrypt_files(ctx, &to_process_files)?
-    };
+    if !confirm_action(&to_process_files, Action::Encryption) {
+        return Ok(())
+    }
 
-    Ok(())
-}
-
-fn begin_encrypt_files(ctx: &Context, files: &[&RawConfigFile]) -> Result<(), CmdError> {
     let mut stdin_guard = ctx.stdin_guard.borrow_mut();
 
-    for file in files {
+    for file in to_process_files {
         // Todo: Check for file existence, if does not exist,
         let recipients = ctx
             .recipients_factory
