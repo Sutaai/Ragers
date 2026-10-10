@@ -1,7 +1,8 @@
 use clap::{CommandFactory, Parser};
 
 use crate::{
-    cli::{Cli, decrypt, edit, encrypt},
+    cli::Cli,
+    cli::cmd,
     config::RawConfig,
     error::CmdError,
 };
@@ -26,9 +27,9 @@ fn wrap_execution(cli: Cli) -> Result<(), CmdError> {
     let ctx = context::Context::new(cli, &config)?;
 
     match &ctx.cli.command {
-        Some(cli::Commands::Encrypt { files }) => encrypt(&ctx, files)?,
-        Some(cli::Commands::Decrypt { files, identity }) => decrypt(&ctx, files, identity)?,
-        Some(cli::Commands::Edit { file, identity }) => edit(&ctx, file, identity)?,
+        Some(cli::Commands::Encrypt { files }) => cmd::encrypt(&ctx, files)?,
+        Some(cli::Commands::Decrypt { files, identity }) => cmd::decrypt(&ctx, files, identity)?,
+        Some(cli::Commands::Edit { file, identity }) => cmd::edit(&ctx, file, identity)?,
         None => {
             Cli::command().print_help().unwrap();
         }

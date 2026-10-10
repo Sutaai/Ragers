@@ -19,9 +19,11 @@ mod decrypt;
 mod edit;
 mod encrypt;
 
-pub use self::decrypt::decrypt;
-pub use self::edit::edit;
-pub use self::encrypt::encrypt;
+pub mod cmd {
+    pub use super::decrypt::decrypt;
+    pub use super::edit::edit;
+    pub use super::encrypt::encrypt;
+}
 
 #[derive(Parser)]
 #[command(name = "ragers", version, about, next_line_help = true)]
