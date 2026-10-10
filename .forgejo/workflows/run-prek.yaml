@@ -9,6 +9,8 @@ on:
 
 jobs:
   prek:
+    # Check if pull request doesn't start with WIP:
+    if: ${{ !startsWith(forgejo.event.pull_request.title, 'WIP:') }}
     runs-on: codeberg-tiny-lazy
     name: Run Prek on project
     steps:
