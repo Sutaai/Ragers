@@ -21,20 +21,24 @@ pub fn decrypt(
     let identities: Vec<&dyn age::Identity> =
         identities_struct.iter().map(|i| i.as_ref()).collect();
 
-    if confirm_action(&to_process_files, Action::Decryption) {
-        for file in &to_process_files {
-            // Todo: Check for file existence, if does not exist,
-            let decrypted_content = {
-                let encrypted_content = std::fs::read(&file.out)?;
-                get_decrypted_content(&encrypted_content, &identities)?
-            };
-
-            std::fs::write(&file.src, &decrypted_content)?;
-
-            // This should only be done after all files have been decrypted
-            fs::remove_file(&file.out)?;
-        }
+    if !ctx.cli.no_prompt && !confirm_action(&to_process_files, Action::Decryption) {
+        return Ok(());
     };
+
+    for file in &to_process_files {
+        // Todo: Check for file existence, if does not exist,
+        let decrypted_content = {
+            let encrypted_content = std::fs::read(&file.out)?;
+            get_decrypted_content(&encrypted_content, &identities)?
+        };
+
+        std::fs::write(&file.src, &decrypted_content)?;
+        println!("decrypted: {}", file.src.display());
+
+        // This should only be done after all files have been decrypted
+        fs::remove_file(&file.out)?;
+        println!("deleted: {}", file.out.display());
+    }
 
     Ok(())
 }

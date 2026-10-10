@@ -43,6 +43,30 @@ pub struct Cli {
     )]
     pub config_path: PathBuf,
 
+    #[arg(
+        short = 'e',
+        long = "editor",
+        action = clap::ArgAction::Set,
+        global = true,
+        required = false,
+        env = "RAGERS_EDITOR",
+        help = "Command or path pointing to an executable to open a file in",
+        value_hint = clap::ValueHint::CommandString,
+        long_help = "Command or path pointing to an executable to open a file in. This may contain arguments, but are not currently used."
+    )]
+    pub editor: Option<String>,
+
+    #[arg(
+        short = 'P',
+        long = "no-prompt",
+        action = clap::ArgAction::SetTrue,
+        global = true,
+        env = "RAGERS_NO_PROMPTS",
+        help = "Automatically ignore prompt by accepting them",
+        long_help = "Flag indicating if Ragers should ignore prompts made to the user. If passed, all prompts will automatically answered as if the user accepted. Certains commands may not be ran if prompting or manual user intervention is required."
+    )]
+    pub no_prompt: bool,
+
     #[command(subcommand)]
     pub command: Option<Commands>,
 }
@@ -299,21 +323,14 @@ fn convert_str_to_cmd(cmd_str: &str) -> (PathBuf, Vec<String>) {
 /// Returns `None` if the variable is not set or is empty.
 /// In the case that the editor binary path can not be found, `None` is returned and a warning is
 /// printed to alert the user.
-fn get_ragers_editor() -> Option<PathBuf> {
-    let env_var = std::env::var_os("RAGERS_EDITOR");
+fn get_ragers_editor(ctx: &Context) -> Option<PathBuf> {
+    let editor = ctx.cli.editor.clone()?;
 
-    env_var.as_ref()?;
-
-    let env_var_str = env_var.unwrap().into_string().ok()?;
-    if env_var_str.is_empty() {
-        return None;
-    };
-
-    let (cmd, _) = convert_str_to_cmd(&env_var_str);
+    let (cmd, _) = convert_str_to_cmd(&editor);
 
     which(cmd).inspect_err(|&err| {
         if err == which::Error::CannotFindBinaryPath {
-            println!("warning: cannot find path to binary for 'RAGERS_EDITOR={env_var_str}' variable. attempting to use your default editor")
+            println!("warning: cannot find path to binary for '{editor}'. attempting to use your default editor")
         }
     }).ok()
 }

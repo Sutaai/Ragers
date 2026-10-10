@@ -16,3 +16,23 @@ hooks = [
     { id = "detect-private-key", exclude = "tests/README.md$" },
     { id = "check-merge-conflict" },
 ]
+
+[[repos]]
+repo = "https://github.com/compilerla/conventional-pre-commit"
+rev = "91ab4bf57e58b32adf1a122681f6ebe164d081c8"  #v4.4.0
+
+hooks = [
+    { id = "conventional-pre-commit", stages = ["commit-msg"] }
+]
+
+[[repos]]
+repo = "local"
+hooks = [
+    {
+        id = "cargo-fmt",
+        name = "fix project formatting",
+        language = "system",
+        entry = "cargo fmt --",
+        types = ["rust"]
+    }
+]

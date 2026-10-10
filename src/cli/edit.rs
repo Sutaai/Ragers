@@ -17,6 +17,11 @@ pub fn edit(
     file_to_edit: &PathBuf,
     identities: &IdentityArgs,
 ) -> Result<(), CmdError> {
+    if ctx.cli.no_prompt {
+        println!("error: this command requires prompting, but no prompt has been set");
+        return Ok(());
+    }
+
     let matched_file = ctx
         .config
         .files
@@ -61,11 +66,14 @@ pub fn edit(
         .map_or(".txt".to_owned(), |e| format!(".{}", e.to_string_lossy()));
 
     // Open editor
-    let ragers_editor = get_ragers_editor();
+    let ragers_editor = get_ragers_editor(ctx);
 
     let filename = format!(
         "edit {}:",
-        file_path.file_name().and_then(|n| n.to_str()).unwrap_or("?")
+        file_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("?")
     );
     let mut editor = inquire::Editor::new(&filename)
         .with_file_extension(&suffix)

@@ -1,11 +1,6 @@
 use clap::{CommandFactory, Parser};
 
-use crate::{
-    cli::Cli,
-    cli::cmd,
-    config::RawConfig,
-    error::CmdError,
-};
+use crate::{cli::Cli, cli::cmd, config::RawConfig, error::CmdError};
 
 mod cli;
 mod config;

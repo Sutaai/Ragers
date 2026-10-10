@@ -2,7 +2,7 @@ use std::{fs, path::PathBuf};
 
 use crate::{
     cli::{Action, confirm_action, get_encrypted_content, obtain_files_to_process},
-    config::{AsArmorFormat},
+    config::AsArmorFormat,
     context::Context,
     error::CmdError,
 };
@@ -10,8 +10,8 @@ use crate::{
 pub fn encrypt(ctx: &Context, files_to_encrypt: &Option<Vec<PathBuf>>) -> Result<(), CmdError> {
     let to_process_files = obtain_files_to_process(ctx, files_to_encrypt)?;
 
-    if !confirm_action(&to_process_files, Action::Encryption) {
-        return Ok(())
+    if !ctx.cli.no_prompt && !confirm_action(&to_process_files, Action::Encryption) {
+        return Ok(());
     }
 
     let mut stdin_guard = ctx.stdin_guard.borrow_mut();
@@ -36,9 +36,11 @@ pub fn encrypt(ctx: &Context, files_to_encrypt: &Option<Vec<PathBuf>>) -> Result
 
         // Write to encrypted file
         std::fs::write(&file.out, &encrypted_content)?;
+        println!("encrypted: {}", file.out.display());
 
         // This should only be done after all files have been encrypted
         fs::remove_file(&file.src)?;
+        println!("deleted: {}", file.src.display());
     }
 
     Ok(())

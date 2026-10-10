@@ -139,7 +139,5 @@ pub enum CmdError {
     AgeReadError(#[from] age::cli_common::ReadError),
 
     #[error("{0}")]
-    InquireError(#[from] inquire::InquireError)
-    // #[error("unexpected error while running program: {0}")]
-    // UnknownError(#[source] Box<dyn std::error::Error>),
+    InquireError(#[from] inquire::InquireError),
 }
