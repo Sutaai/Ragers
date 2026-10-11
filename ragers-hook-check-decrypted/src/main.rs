@@ -1,11 +1,15 @@
-use lexopt::ValueExt;
+use lexopt::{Arg::Value, ValueExt};
 use serde::Deserialize;
 use std::{fmt::Display, fs, path::PathBuf, string::FromUtf8Error};
 use yaml_serde;
 
 const HELP: &'static str = "ragers hook - check decrypted files
 
-Usage: ragers-hook-check-decrypted [-c CONFIG] [--working-dir WORKING_DIR]
+Usage: ragers-hook-check-decrypted [-c CONFIG] [--working-dir WORKING_DIR] (FILE)
+
+Arguments:
+  (FILE)            Optional path to a file to check against config. If not provided, check
+                    against all files in the repo.
 
 Options:
   -c, --config      Path to the config file to open. If not provided, default \".ragers.yaml\"
@@ -30,6 +34,10 @@ struct Args {
     // Must be relative to the paths checked in the config file. If not provided, the default will
     // be the current working directory.
     working_dir: PathBuf,
+
+    // Optional Optional path to a file to check against config. If not provided, check against all
+    // files in the repo.
+    file_to_check: Option<PathBuf>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -42,8 +50,6 @@ struct Config {
 struct ConfigFile {
     /// The path of the unencrypted file source
     pub src: PathBuf,
-    /// The path to the encrypted file output
-    pub out: PathBuf,
 }
 
 fn parse_args() -> Result<Args, ExecError> {
@@ -51,6 +57,7 @@ fn parse_args() -> Result<Args, ExecError> {
 
     let mut config_path: Option<PathBuf> = None;
     let mut working_dir: PathBuf = std::env::current_dir()?;
+    let mut file_to_check: Option<PathBuf> = None;
 
     let mut parser = lexopt::Parser::from_env();
     while let Some(arg) = parser.next()? {
@@ -74,6 +81,9 @@ fn parse_args() -> Result<Args, ExecError> {
                 println!("{HELP}");
                 std::process::exit(0);
             }
+            Value(val) => {
+                file_to_check = Some(val.parse()?);
+            }
             _ => {
                 println!("{HELP}");
                 std::process::exit(0);
@@ -84,6 +94,7 @@ fn parse_args() -> Result<Args, ExecError> {
     Ok(Args {
         config: config_path,
         working_dir,
+        file_to_check,
     })
 }
 
@@ -144,10 +155,18 @@ fn wrap_execution() -> Result<(), ExecError> {
 
     let mut detected_files: Vec<PathBuf> = Vec::new();
 
-    for file in &toml_struct.files {
-        let path = work_dir.join(&file.src);
-        if fs::exists(&path)? {
+    if let Some(path) = args.file_to_check {
+        let path = work_dir.join(&path);
+        // Check path is in config
+        if let Some(_) = toml_struct.files.iter().find(|f| f.src == path) {
             detected_files.push(path);
+        }
+    } else {
+        for file in &toml_struct.files {
+            let path = work_dir.join(&file.src);
+            if fs::exists(&path)? {
+                detected_files.push(path);
+            }
         }
     }
 
