@@ -1,4 +1,4 @@
 - id: check-decrypted-files-ragers
   name: check for decrypted files with ragers
-  entry: ragers-hook-check-decrypted/src/main.rs
+  entry: ragers-hook-check-decrypted
   language: rust
