@@ -22,26 +22,4 @@ impl<'config> Context<'config> {
             stdin_guard: RefCell::new(age::cli_common::StdinGuard::new(false)),
         })
     }
-
-    pub fn get_identities(
-        &self,
-    ) -> Result<Vec<Box<dyn age::Identity>>, age::cli_common::ReadError> {
-        let mut stdin_guard = age::cli_common::StdinGuard::new(true);
-
-        let dyn_identities = age::cli_common::read_identities(
-            self.cli
-                .identities_file
-                .iter()
-                .map(|item| {
-                    item.to_str()
-                        .expect("path must be turned to string")
-                        .to_owned()
-                })
-                .collect::<Vec<String>>(),
-            None,
-            &mut stdin_guard,
-        )?;
-
-        Ok(dyn_identities)
-    }
 }

@@ -6,7 +6,9 @@
           "features": "all"
         },
         "diagnostics": {
-          "warningsAsHint": ["dead_code"]
+          "warningsAsHint": [
+            "dead_code"
+          ]
         }
       }
     }

@@ -1,9 +1,7 @@
-use std::{
-    cell::RefCell,
-    collections::{HashMap, HashSet},
-    path::{Path, PathBuf},
-    rc::Rc,
-};
+use std::cell::RefCell;
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
+use std::rc::Rc;
 
 use age::cli_common::read_recipients;
 use itertools::Itertools;
@@ -50,6 +48,25 @@ pub struct RawConfigFile {
     pub armor: bool,
 }
 
+pub trait AsArmorFormat {
+    /// Returns the corresponding [`age::armor::Format`] based on the value we have.
+    /// If this is [`true`], then [`age::armor::Format::AsciiArmor`] is returned. Else,
+    /// [`age::armor::Format::Binary`] is returned.
+    ///
+    /// This is the equivalent of making an if check and returning the corresponding format.
+    fn as_armor_format(&self) -> age::armor::Format;
+}
+
+impl AsArmorFormat for bool {
+    fn as_armor_format(&self) -> age::armor::Format {
+        if *self {
+            age::armor::Format::AsciiArmor
+        } else {
+            age::armor::Format::Binary
+        }
+    }
+}
+
 impl RawConfig {
     /// Creates a new instance of [`RawConfig`] by reading the file at `config_path`.
     ///
@@ -58,7 +75,7 @@ impl RawConfig {
     pub fn new(config_path: &Path) -> Result<Self, ConfigError> {
         let builder = config::Config::builder().add_source(config::File::from(config_path));
 
-        return RawConfig::new_from_builder(builder);
+        RawConfig::new_from_builder(builder)
     }
 
     /// Builds the config directly from a [`config::ConfigBuilder`]. This allow for extra tweaking
