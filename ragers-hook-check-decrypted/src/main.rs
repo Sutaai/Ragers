@@ -158,7 +158,11 @@ fn wrap_execution() -> Result<(), ExecError> {
     if let Some(path) = args.file_to_check {
         let path = work_dir.join(&path);
         // Check path is in config
-        if let Some(_) = toml_struct.files.iter().find(|f| f.src == path) {
+        if let Some(_) = toml_struct
+            .files
+            .iter()
+            .find(|f| std::path::absolute(&f.src).unwrap() == std::path::absolute(&path).unwrap())
+        {
             detected_files.push(path);
         }
     } else {
