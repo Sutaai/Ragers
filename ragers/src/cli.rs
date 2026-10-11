@@ -32,16 +32,14 @@ pub struct Cli {
         short = 'c',
         long = "config",
         action = clap::ArgAction::Set,
-        default_value = ".ragers.yaml",
         global = true,
-        // default_values = [".ragers.yaml", ".ragers.yml"], // For now this is confusing me too much, lack of documentation
         env = "RAGERS_CONFIG",
         help = "Path the Ragers configuration file",
         value_hint = clap::ValueHint::FilePath,
         value_parser = clap::value_parser!(PathBuf),
-        long_help = "Path the Ragers configuration file. This must specify a path to a YAML file that can be read as per Ragers's configuration standard. This config file is used to determine which and how are files are encrypted. Refer to documentation."
+        long_help = "Path the Ragers configuration file. This must specify a path to a YAML file that can be read as per Ragers's configuration standard. This config file is used to determine which and how are files are encrypted. Refer to documentation. If not provided, \".ragers.yaml\" and \".ragers.yml\" will be attempted as defaults, in this order."
     )]
-    pub config_path: PathBuf,
+    pub config_path: Option<PathBuf>,
 
     #[arg(
         short = 'e',

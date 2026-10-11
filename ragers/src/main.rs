@@ -18,7 +18,28 @@ fn main() {
 }
 
 fn wrap_execution(cli: Cli) -> Result<(), CmdError> {
-    let config = RawConfig::new(&cli.config_path)?;
+    let config_path = {
+        if let Some(custom_config_path) = &cli.config_path {
+            custom_config_path.clone()
+        } else {
+            let working_dir = std::env::current_dir()?;
+            let yaml_ver = working_dir.join(".ragers.yaml");
+            let yml_ver = working_dir.join(".ragers.yml");
+            if std::fs::exists(&yaml_ver)? {
+                yaml_ver
+            } else if std::fs::exists(&yml_ver)? {
+                yml_ver
+            } else {
+                return Err(CmdError::IO(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "no config file found",
+                )));
+            }
+        }
+    };
+
+    let config = RawConfig::new(&config_path)?;
+
     let ctx = context::Context::new(cli, &config)?;
 
     match &ctx.cli.command {

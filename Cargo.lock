@@ -1688,7 +1688,7 @@ dependencies = [
 
 [[package]]
 name = "ragers-hook-check-decrypted"
-version = "1.0.0-dev1"
+version = "1.0.0"
 dependencies = [
  "exitcode",
  "lexopt",
