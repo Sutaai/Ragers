@@ -37,7 +37,7 @@ struct Args {
 
     // Optional Optional path to a file to check against config. If not provided, check against all
     // files in the repo.
-    file_to_check: Option<PathBuf>,
+    files_to_check: Vec<PathBuf>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -57,7 +57,7 @@ fn parse_args() -> Result<Args, ExecError> {
 
     let mut config_path: Option<PathBuf> = None;
     let mut working_dir: PathBuf = std::env::current_dir()?;
-    let mut file_to_check: Option<PathBuf> = None;
+    let mut file_to_check: Vec<PathBuf> = Vec::new();
 
     let mut parser = lexopt::Parser::from_env();
     while let Some(arg) = parser.next()? {
@@ -82,7 +82,7 @@ fn parse_args() -> Result<Args, ExecError> {
                 std::process::exit(0);
             }
             Value(val) => {
-                file_to_check = Some(val.parse()?);
+                file_to_check.push(val.parse()?);
             }
             _ => {
                 println!("{HELP}");
@@ -94,7 +94,7 @@ fn parse_args() -> Result<Args, ExecError> {
     Ok(Args {
         config: config_path,
         working_dir,
-        file_to_check,
+        files_to_check: file_to_check,
     })
 }
 
@@ -155,22 +155,22 @@ fn wrap_execution() -> Result<(), ExecError> {
 
     let mut detected_files: Vec<PathBuf> = Vec::new();
 
-    if let Some(path) = args.file_to_check {
-        let path = work_dir.join(&path);
-        // Check path is in config
-        if let Some(_) = toml_struct
-            .files
-            .iter()
-            .find(|f| std::path::absolute(&f.src).unwrap() == std::path::absolute(&path).unwrap())
-        {
-            detected_files.push(path);
+    let files_to_check = {
+        if !args.files_to_check.is_empty() {
+            toml_struct
+                .files
+                .into_iter()
+                .filter(|file| args.files_to_check.contains(&file.src))
+                .collect::<Vec<ConfigFile>>()
+        } else {
+            toml_struct.files
         }
-    } else {
-        for file in &toml_struct.files {
-            let path = work_dir.join(&file.src);
-            if fs::exists(&path)? {
-                detected_files.push(path);
-            }
+    };
+
+    for file in &files_to_check {
+        let path = work_dir.join(&file.src);
+        if fs::exists(&path)? {
+            detected_files.push(path);
         }
     }
 
