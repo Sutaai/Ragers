@@ -11,4 +11,10 @@ repository = "https://codeberg.org/Sutaai/Ragers"
 license = "MIT"
 publish = false
 
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
+panic = "abort"
+
 # [workspace.metadata]

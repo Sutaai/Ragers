@@ -1,6 +1,6 @@
 [package]
 name = "ragers-hook-check-decrypted"
-version = "1.0.0-dev1"
+version = "1.0.0"
 description = "Hook for pre-commit/Prek ensuring that no decrypted files with Ragers are commited by accident"
 
 authors.workspace = true
