@@ -24,6 +24,7 @@ jobs:
 
       - name: Install rust with rustup
         run: |
+          rustup set auto-self-update disable
           rustup -v update 1.96
 
       - name: Run Prek
