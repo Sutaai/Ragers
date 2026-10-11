@@ -1,0 +1,18 @@
+[package]
+name = "ragers-hook-check-decrypted"
+version = "1.0.0"
+description = "Hook for pre-commit/Prek ensuring that no decrypted files with Ragers are commited by accident"
+
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+repository.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+exitcode = "1.1.2"
+lexopt = "0.3.2"
+serde = { version = "1.0.229", features = ["derive"] }
+yaml_serde = "0.10.7"
