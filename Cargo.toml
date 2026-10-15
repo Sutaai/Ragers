@@ -1,5 +1,8 @@
+#:schema https://www.schemastore.org/cargo.json
+
 [workspace]
 members = ["ragers", "ragers-hook-check-decrypted"]
+default-members = ["ragers"]
 resolver = "3"
 
 [workspace.package]
@@ -16,5 +19,3 @@ strip = true
 lto = true
 codegen-units = 1
 panic = "abort"
-
-# [workspace.metadata]

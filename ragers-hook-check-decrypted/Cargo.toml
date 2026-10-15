@@ -1,3 +1,5 @@
+#:schema https://www.schemastore.org/cargo.json
+
 [package]
 name = "ragers-hook-check-decrypted"
 version = "1.0.0"
