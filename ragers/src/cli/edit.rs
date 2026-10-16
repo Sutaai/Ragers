@@ -4,18 +4,18 @@ use itertools::Itertools;
 
 use crate::{
     cli::{
-        IdentityArgs, get_decrypted_content, get_encrypted_content, get_identities,
+        IdentityArg, get_decrypted_content, get_encrypted_content, get_identities,
         get_ragers_editor, is_same_path,
     },
     config::AsArmorFormat,
     context::Context,
-    error::CmdError,
+    error::{CmdError, WithPath},
 };
 
 pub fn edit(
     ctx: &Context,
     file_to_edit: &PathBuf,
-    identities: &IdentityArgs,
+    identities: &IdentityArg,
 ) -> Result<(), CmdError> {
     if ctx.cli.no_prompt {
         println!("error: this command requires prompting, but no prompt has been set");
@@ -32,7 +32,8 @@ pub fn edit(
         })
         .ok_or(CmdError::NoFilesToProcess)?;
 
-    let is_encrypted = is_same_path(&matched_file.out, file_to_edit)?;
+    let is_encrypted =
+        is_same_path(&matched_file.out, file_to_edit).result_with_path(Some(&matched_file.out))?;
     let file_path = if is_encrypted {
         println!("info: matching against an encrypted file");
         &matched_file.out
@@ -46,17 +47,18 @@ pub fn edit(
             let identities = get_identities(ctx, &identities.identities_file)?;
             let identities_refs: Vec<&dyn age::Identity> =
                 identities.iter().map(|i| i.as_ref()).collect();
-            let encrypted_content = fs::read(file_path)?;
+            let encrypted_content = fs::read(file_path).result_with_path(Some(file_path))?;
             get_decrypted_content(&encrypted_content, &identities_refs)?
         } else {
-            fs::read(file_path)?
+            fs::read(file_path).result_with_path(Some(file_path))?
         };
 
-        String::from_utf8(buffer).map_err(|_| {
-            CmdError::IO(std::io::Error::new(
+        String::from_utf8(buffer).map_err(|_| CmdError::Io {
+            source: std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 format!("'{}' could not be converted to utf8", file_path.display()),
-            ))
+            ),
+            path: Some(file_path.clone()),
         })?
     };
 
@@ -86,7 +88,7 @@ pub fn edit(
     let new_content = editor.prompt()?;
 
     match is_encrypted {
-        false => fs::write(file_path, new_content.as_bytes())?,
+        false => fs::write(file_path, new_content.as_bytes()).result_with_path(Some(file_path))?,
         true => {
             let encrypted_content = {
                 let mut stdin_guard = ctx.stdin_guard.borrow_mut();
@@ -103,7 +105,8 @@ pub fn edit(
                 )
             }?;
 
-            std::fs::write(&matched_file.out, &encrypted_content)?;
+            std::fs::write(&matched_file.out, &encrypted_content)
+                .result_with_path(Some(&matched_file.out))?;
         }
     }
     Ok(())

@@ -1,0 +1,29 @@
+{
+  "configurations": [
+    {
+      "name": "Ragers - no args",
+      "program": "${workspaceFolder}/target/debug/ragers",
+      "request": "launch",
+      "type": "lldb"
+    },
+    {
+      "args": [
+        "encrypt"
+      ],
+      "name": "Ragers - encrypt",
+      "program": "${workspaceFolder}/target/debug/ragers",
+      "request": "launch",
+      "type": "lldb"
+    },
+    {
+      "args": [
+        "decrypt"
+      ],
+      "name": "Ragers - decrypt",
+      "program": "${workspaceFolder}/target/debug/ragers",
+      "request": "launch",
+      "type": "lldb"
+    }
+  ],
+  "version": "0.2.0"
+}

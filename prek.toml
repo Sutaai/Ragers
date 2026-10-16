@@ -1,3 +1,5 @@
+#:schema https://raw.githubusercontent.com/j178/prek/refs/heads/master/prek.schema.json
+
 [[repos]]
 repo = "builtin"
 
@@ -32,7 +34,8 @@ hooks = [
         id = "cargo-fmt",
         name = "fix project formatting",
         language = "system",
-        entry = "cargo fmt --",
+        entry = "cargo",
+        args = ["fmt", "--"],
         types = ["rust"]
     }
 ]

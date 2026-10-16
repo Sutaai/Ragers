@@ -130,9 +130,11 @@ pub enum CmdError {
     #[error("encryption error: {0}")]
     EncryptionError(#[from] EncryptionError),
 
-    /// For more "unknown" IO error, notably [`crate::cli::find_comparable_path`]
-    #[error("IO error: {0}")]
-    IO(#[from] std::io::Error),
+    #[error("Io error: {source}{}", fmt_io_path(path))]
+    Io {
+        source: std::io::Error,
+        path: Option<PathBuf>,
+    },
 
     /// Returned when the age library is unable to parse one of it's struct
     #[error("could not parse recipient or identity: {0}")]
@@ -140,4 +142,29 @@ pub enum CmdError {
 
     #[error("{0}")]
     InquireError(#[from] inquire::InquireError),
+}
+
+fn fmt_io_path(path: &Option<PathBuf>) -> String {
+    if let Some(p) = path {
+        format!(" (at path: {})", p.display())
+    } else {
+        "".to_owned()
+    }
+}
+
+pub trait WithPath<T> {
+    fn result_with_path(self, path: Option<&PathBuf>) -> Result<T, CmdError>;
+}
+
+impl<T> WithPath<T> for std::io::Result<T> {
+    fn result_with_path(self, path: Option<&PathBuf>) -> Result<T, CmdError> {
+        self.map_err(|err| CmdError::Io {
+            source: err,
+            path: if let Some(p) = path {
+                Some(p.clone())
+            } else {
+                None
+            },
+        })
+    }
 }
