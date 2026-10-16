@@ -1,7 +1,9 @@
+#:schema https://www.schemastore.org/cargo.json
+
 [package]
 name = "ragers"
 description = "Ragers - Rust age's repository solution"
-version = "0.2.0"
+version = "0.3.0-dev1"
 
 authors.workspace = true
 edition.workspace = true

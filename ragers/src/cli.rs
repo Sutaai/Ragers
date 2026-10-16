@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use inquire::Confirm;
 use itertools::Itertools;
 use which::which;
@@ -55,6 +55,19 @@ pub struct Cli {
     pub editor: Option<String>,
 
     #[arg(
+        short = 'f',
+        long = "on-failure",
+        action = clap::ArgAction::Set,
+        default_value = "ignore",
+        value_enum,
+        global = true,
+        env = "RAGERS_ON_FAILURE",
+        help = "Set how Ragers should behave when it fails to process a file during encryption/decryption",
+        long_help = "Set how Ragers should behave when it fails to process a file during encryption/decryption"
+    )]
+    pub on_failure: FailurePolicy,
+
+    #[arg(
         short = 'P',
         long = "no-prompt",
         action = clap::ArgAction::SetTrue,
@@ -82,6 +95,9 @@ pub enum Commands {
             required = false
         )]
         files: Option<Vec<PathBuf>>,
+
+        #[command(flatten)]
+        no_delete: NoDeleteArg,
     },
 
     #[command(about = "Decrypt one, multiple or all files")]
@@ -97,7 +113,10 @@ pub enum Commands {
         files: Option<Vec<PathBuf>>,
 
         #[command(flatten)]
-        identity: IdentityArgs,
+        identity: IdentityArg,
+
+        #[command(flatten)]
+        no_delete: NoDeleteArg,
     },
 
     #[command(about = "Edit a file directly without manual decryption")]
@@ -113,14 +132,37 @@ pub enum Commands {
         file: PathBuf,
 
         #[command(flatten)]
-        identity: IdentityArgs,
+        identity: IdentityArg,
     },
 }
 
+#[derive(Clone, ValueEnum)]
+pub enum FailurePolicy {
+    /// Ignore when a file fails to be processed
+    Ignore,
+    /// Abort when a file fails to be processed
+    Abort,
+    /// Not implemented. Ignore when a file fails to be processed, and revert to previous files (atomic)
+    AbortAtomic,
+}
+
 #[derive(Debug, Args)]
-pub struct IdentityArgs {
+pub struct NoDeleteArg {
     #[arg(
-        short = 'I',
+        short = 'D',
+        long = "no-delete",
+        action = clap::ArgAction::SetTrue,
+        env = "RAGERS_NO_DELETE",
+        help = "Configure Ragers to not delete any file during file processing.",
+        long_help = "Configure Ragers to not delete any file during file processing, leaving source untouched after being read."
+    )]
+    pub no_delete: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct IdentityArg {
+    #[arg(
+        short = 'i',
         long = "identity-file",
         action = clap::ArgAction::Append,
         env = "RAGERS_IDENTITIES_FILE",

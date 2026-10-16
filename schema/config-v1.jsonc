@@ -89,17 +89,6 @@
             "title": "Armor",
             "description": "Indicate if the output file should be encrypted using the armor format.",
             "default": false
-          },
-          "encryptors": {
-            "type": "array",
-            "title": "Encryptors",
-            "description": "A list of encryptors. These are the persons who have the ability to encrypt this file.",
-            "items": {
-              "type": "string",
-              "title": "Encryptor",
-              "description": "An encryptor. Can encrypt this file.",
-              "minLength": 1
-            }
           }
         },
         "required": [
