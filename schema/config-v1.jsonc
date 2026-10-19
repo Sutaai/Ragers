@@ -1,4 +1,5 @@
 {
+  // Editor: https://www.metaconfigurator.org/schema
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Ragers config file definition",
   "type": "object",
@@ -8,18 +9,36 @@
       "description": "Schema definition"
     },
     "recipients": {
-      "$ref": "#/$defs/recipients"
+      "$ref": "#/$defs/Recipients"
     },
     "files": {
-      "$ref": "#/$defs/files"
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/File"
+      }
     }
+    // "policy": {
+    //   "type": "object",
+    //   "title": "Policy definition",
+    //   "description": "Policies define the (default) behaviors to use while using Rager",
+    //   "properties": {
+    //     "armor": {
+    //       "type": "boolean",
+    //       "default": false,
+    //       "description": "Defines if files should use the armor format by default. By default, `false`.",
+    //       "title": "Armored format policy"
+    //     }
+    //   },
+    //   "additionalProperties": false
+    // }
   },
   "required": [
     "recipients"
   ],
   "additionalProperties": false,
   "$defs": {
-    "recipients": {
+    "Recipients": {
       "type": "object",
       "properties": {
         "groups": {
@@ -57,51 +76,34 @@
         "description": "A recipient. Can decrypt/encrypt a file if defined."
       }
     },
-    "files": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "src": {
-            "type": "string",
-            "title": "Source file",
-            "description": "The source path of the file you wish to encrypt.",
-            "format": "iri-reference"
-          },
-          "out": {
-            "type": "string",
-            "title": "Output file",
-            "description": "The output path of the file you wish to encrypt.",
-            "format": "iri-reference"
-          },
-          "recipients": {
-            "type": "array",
-            "title": "Recipients",
-            "description": "List of recipients that can decrypt this file.",
-            "items": {
-              "type": "string",
-              "title": "Recipient",
-              "description": "A recipient that may encrypt/decrypt this file. Can be a singular recipient, a group, or a file. See documentation for string format."
-            }
-          },
-          "armor": {
-            "type": "boolean",
-            "title": "Armor",
-            "description": "Indicate if the output file should be encrypted using the armor format.",
-            "default": false
+    "File": {
+      "type": "object",
+      "properties": {
+        "src": {
+          "type": "string",
+          "description": "The source path of the file you wish to encrypt."
+        },
+        "out": {
+          "type": "string",
+          "description": "The output path of the file you wish to encrypt."
+        },
+        "recipients": {
+          "type": "array",
+          "description": "List of recipients alias that can decrypt this file.",
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
           }
         },
-        "required": [
-          "src",
-          "out",
-          "recipients"
-        ],
-        "title": "File",
-        "description": "Configuration of the file you wish to encrypt.",
-        "additionalProperties": false
+        "armor": {
+          "type": "boolean",
+          "description": "Indicate if the output file should be encrypted using the armor format."
+        }
       },
-      "title": "Files",
-      "description": "A list of files you wish to encrypt."
+      "required": [
+        "src",
+        "recipients"
+      ]
     }
   }
 }
