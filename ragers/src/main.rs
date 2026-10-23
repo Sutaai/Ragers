@@ -14,9 +14,12 @@ mod error;
 fn main() {
     let cli = Cli::parse();
     match wrap_execution(cli) {
-        Ok(_) => {} // Execution is done
+        Ok(_) => {
+            std::process::exit(0);
+        } // Execution is done
         Err(err) => {
-            println!("error: {err}")
+            println!("error: {err}");
+            std::process::exit(1);
         }
     }
 }
