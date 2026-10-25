@@ -1,11 +1,12 @@
 use std::{fs, path::PathBuf};
 
 use itertools::Itertools;
+use same_file::is_same_file;
 
 use crate::{
     cli::{
         IdentityArg, get_decrypted_content, get_encrypted_content, get_identities,
-        get_ragers_editor, is_same_path,
+        get_ragers_editor,
     },
     config::AsArmorFormat,
     context::Context,
@@ -27,13 +28,13 @@ pub fn edit(
         .files
         .iter()
         .find(|cfg| {
-            is_same_path(&cfg.src, file_to_edit).ok().is_some()
-                || is_same_path(&cfg.out, file_to_edit).ok().is_some()
+            is_same_file(&cfg.src, file_to_edit).ok().is_some_and(|p| p)
+                || is_same_file(&cfg.out, file_to_edit).ok().is_some_and(|p| p)
         })
         .ok_or(CmdError::NoFilesToProcess)?;
 
     let is_encrypted =
-        is_same_path(&matched_file.out, file_to_edit).result_with_path(Some(&matched_file.out))?;
+        is_same_file(&matched_file.out, file_to_edit).result_with_path(Some(&matched_file.out))?;
     let file_path = if is_encrypted {
         println!("info: matching against an encrypted file");
         &matched_file.out

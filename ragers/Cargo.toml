@@ -5,7 +5,6 @@ name = "ragers"
 description = "Ragers - Rust age's repository solution"
 version = "0.3.0-dev1"
 
-authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
@@ -19,6 +18,7 @@ clap = { version = "4.6.1", features = ["cargo", "derive", "env"] }
 config = { version = "0.15.25", features = ["yaml"] }
 inquire = { version = "0.9.4", features = ["editor"] }
 itertools = "0.15.0"
+same-file = "1.0.6"
 serde = { version = "1.0.228", features = ["serde_derive"] }
 thiserror = { version = "2.0.19", features = ["std"] }
 which = "8.0.6"

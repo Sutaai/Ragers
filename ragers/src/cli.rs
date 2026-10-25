@@ -1,12 +1,13 @@
 use std::{
     fmt::Display,
     io::{Read, Write},
-    path::{Path, PathBuf},
+    path::PathBuf,
 };
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use inquire::Confirm;
 use itertools::Itertools;
+use same_file::is_same_file;
 use which::which;
 
 use crate::{
@@ -198,9 +199,9 @@ fn obtain_files_to_process<'ctx>(
             .iter()
             .filter(|config_file| {
                 for one_requested_path in requested {
-                    if is_same_path(one_requested_path, &config_file.src)
+                    if is_same_file(one_requested_path, &config_file.src)
                         .ok()
-                        .is_some()
+                        .is_some_and(|p| p)
                     {
                         return true;
                     }
@@ -215,22 +216,6 @@ fn obtain_files_to_process<'ctx>(
     }
 
     Ok(files)
-}
-
-/// Compares two path and attempt to check if they are pointing to the same file.
-///
-/// This will compares the two paths using their absolute representation, ensuring that a different current directory
-/// won't be an issue while making the check.
-fn is_same_path<P: AsRef<Path>>(path_one: P, path_two: P) -> Result<bool, std::io::Error> {
-    // https://ibb.co/TqdmZBYJ
-    let absolute_path_one = std::path::absolute(path_one)?;
-    let absolute_path_two = std::path::absolute(path_two)?;
-
-    if absolute_path_one == absolute_path_two {
-        return Ok(true);
-    }
-
-    Ok(false)
 }
 
 /// Attempt to decrypt an encrypted content buffer.
