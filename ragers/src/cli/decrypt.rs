@@ -27,19 +27,19 @@ pub fn decrypt(
         return Ok(());
     };
 
-    let mut files_to_delete: Vec<&PathBuf> = Vec::new();
+    let mut files_to_delete: Vec<PathBuf> = Vec::new();
 
     for file in to_process_files {
         // Todo: Check for file existence, if does not exist,
         match process_file(file, &identities) {
             Ok(_) => {
                 println!("decrypted: {}", file.src.display());
-                files_to_delete.push(&file.out);
+                files_to_delete.push(file.get_output_path());
             }
             Err(err) => match &ctx.cli.on_failure {
                 FailurePolicy::Abort => return Err(err),
                 FailurePolicy::Ignore => {
-                    println!("ignored: {}", file.out.display());
+                    println!("ignored: {}", file.get_output_path().display());
                     continue;
                 }
                 FailurePolicy::AbortAtomic => unimplemented!(),
@@ -59,7 +59,8 @@ pub fn decrypt(
 
 fn process_file(file: &RawConfigFile, identities: &[&dyn age::Identity]) -> Result<(), CmdError> {
     let decrypted_content = {
-        let encrypted_content = std::fs::read(&file.out).result_with_path(Some(&file.out))?;
+        let encrypted_content = std::fs::read(&file.get_output_path())
+            .result_with_path(Some(&file.get_output_path()))?;
         get_decrypted_content(&encrypted_content, &identities)?
     };
 

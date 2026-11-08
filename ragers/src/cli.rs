@@ -289,7 +289,7 @@ fn confirm_action(files: &[&RawConfigFile], action: Action) -> bool {
         .iter()
         .map(|path| match action {
             Action::Encryption => format!("\t- {}", path.src.display()),
-            Action::Decryption => format!("\t- {}", path.out.display()),
+            Action::Decryption => format!("\t- {}", path.get_output_path().display()),
         })
         .join("\n");
 

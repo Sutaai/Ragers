@@ -27,7 +27,7 @@ pub fn encrypt(
     for file in to_process_files {
         match process_file(ctx, &mut stdin_guard, file) {
             Ok(_) => {
-                println!("encrypted: {}", file.out.display());
+                println!("encrypted: {}", file.get_output_path().display());
                 files_to_delete.push(&file.src);
             }
             Err(err) => match &ctx.cli.on_failure {
@@ -67,7 +67,8 @@ fn process_file(
         )?
     };
 
-    std::fs::write(&file.out, &encrypted_content).result_with_path(Some(&file.out))?;
+    std::fs::write(&file.get_output_path(), &encrypted_content)
+        .result_with_path(Some(&file.get_output_path()))?;
 
     Ok(())
 }

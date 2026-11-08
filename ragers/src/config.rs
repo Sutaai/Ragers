@@ -40,12 +40,21 @@ pub struct RawConfigFile {
     /// The path of the unencrypted file source
     pub src: PathBuf,
     /// The path to the encrypted file output
-    pub out: PathBuf,
+    pub out: Option<PathBuf>,
     /// The recipients of the file
     pub recipients: Vec<String>,
     /// Should this file be armored?
     #[serde(default)]
     pub armor: bool,
+}
+
+impl RawConfigFile {
+    pub fn get_output_path(&self) -> PathBuf {
+        match &self.out {
+            Some(path) => path.clone(),
+            None => self.src.with_extension(".age"),
+        }
+    }
 }
 
 pub trait AsArmorFormat {
@@ -228,13 +237,13 @@ impl ConfigValidator {
 
     fn check_files_unique_destination(&self, config: &RawConfig) -> ConfCheckResult {
         let files = &config.files;
-        let mut seen: HashSet<&PathBuf> = HashSet::new();
+        let mut seen: HashSet<PathBuf> = HashSet::new();
 
         for (index, file) in files.iter().enumerate() {
-            if !seen.insert(&file.out) {
+            if !seen.insert(file.get_output_path()) {
                 return Err(ConfigValidationError::FileDuplicatedDestination {
                     index,
-                    path: file.out.clone(),
+                    path: file.get_output_path(),
                 });
             }
         }
