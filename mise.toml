@@ -1,4 +1,6 @@
 [tools]
 age = "1"
 prek = "0.5"
+"pypi:zensical" = "0.1.0"
 rust = "1.97"
+uv = "0.13.7"

@@ -19,7 +19,7 @@ Plugins are NOT supported or intended for the moment being.
 
 This tool is currently English only.
 
-Only standard age X55219 and SSH (recipient-based) encryption will be supported.
+Only standard age X25519 and SSH (recipient-based) encryption will be supported.
 
 ---
 
