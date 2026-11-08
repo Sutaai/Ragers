@@ -52,7 +52,7 @@ impl RawConfigFile {
     pub fn get_output_path(&self) -> PathBuf {
         match &self.out {
             Some(path) => path.clone(),
-            None => self.src.with_extension(".age"),
+            None => self.src.with_added_extension(".age"),
         }
     }
 }
