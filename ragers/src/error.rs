@@ -101,11 +101,7 @@ impl<T> WithPath<T> for std::io::Result<T> {
     fn result_with_path(self, path: Option<&PathBuf>) -> Result<T, CmdError> {
         self.map_err(|err| CmdError::Io {
             source: err,
-            path: if let Some(p) = path {
-                Some(p.clone())
-            } else {
-                None
-            },
+            path: path.cloned(),
         })
     }
 }

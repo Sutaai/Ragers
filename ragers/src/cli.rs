@@ -180,14 +180,14 @@ impl IdentityArg {
     pub fn path_to_identities(&self, config_path: &Path) -> Vec<PathBuf> {
         match &self.identities_file {
             None => {
-                return vec![
+                vec![
                     config_path
                         .parent()
                         .expect("same stuff as usual, you're REALLY not supposed to be here.")
                         .join(".identity"),
-                ];
+                ]
             }
-            Some(paths) => return paths.clone(),
+            Some(paths) => paths.clone(),
         }
     }
 }
@@ -249,7 +249,7 @@ fn get_encrypted_content(
 ) -> Result<Vec<u8>, EncryptionError> {
     let mut encrypted_content: Vec<u8> = Vec::new();
 
-    let encryptor = age::Encryptor::with_recipients(recipients.into_iter().copied())?;
+    let encryptor = age::Encryptor::with_recipients(recipients.iter().copied())?;
 
     let format = match use_armor_format {
         false => age::armor::Format::Binary,

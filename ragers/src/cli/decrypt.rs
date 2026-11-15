@@ -25,9 +25,11 @@ pub fn decrypt(
             .into_iter()
             .filter(|file| {
                 for select_file in selected_files {
-                    return is_same_file(&file.out, select_file).unwrap_or(false);
+                    if is_same_file(&file.out, select_file).unwrap_or(false) {
+                        return true;
+                    }
                 }
-                return false;
+                false
             })
             .collect(),
     };
@@ -76,7 +78,7 @@ pub fn decrypt(
 fn process_file(file: &ProcessableFile, identities: &[&dyn age::Identity]) -> Result<(), CmdError> {
     let decrypted_content = {
         let encrypted_content = std::fs::read(&file.out).result_with_path(Some(&file.out))?;
-        get_decrypted_content(&encrypted_content, &identities)?
+        get_decrypted_content(&encrypted_content, identities)?
     };
 
     std::fs::write(&file.src, &decrypted_content).result_with_path(Some(&file.src))?;

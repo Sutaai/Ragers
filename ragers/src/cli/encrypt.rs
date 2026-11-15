@@ -24,9 +24,11 @@ pub fn encrypt(
             .into_iter()
             .filter(|file| {
                 for select_file in selected_files {
-                    return is_same_file(&file.src, select_file).unwrap_or(false);
+                    if is_same_file(&file.src, select_file).unwrap_or(false) {
+                        return true;
+                    };
                 }
-                return false;
+                false
             })
             .collect(),
     };
