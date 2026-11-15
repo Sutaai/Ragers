@@ -1,13 +1,14 @@
 use std::{fs, path::PathBuf};
 
 use itertools::Itertools;
+use same_file::is_same_file;
 
 use crate::{
     cli::{
         Action, FailurePolicy, IdentityArg, NoDeleteArg, confirm_action, get_decrypted_content,
-        get_identities, obtain_files_to_process,
+        get_identities, get_processable_files,
     },
-    config::RawConfigFile,
+    config::ProcessableFile,
     context::Context,
     error::{CmdError, WithPath},
 };
@@ -18,28 +19,43 @@ pub fn decrypt(
     identities: &IdentityArg,
     no_delete: &NoDeleteArg,
 ) -> Result<(), CmdError> {
-    let to_process_files: Vec<&RawConfigFile> = obtain_files_to_process(ctx, files_to_decrypt)?;
+    let processable_files = match files_to_decrypt {
+        None => get_processable_files(ctx)?,
+        Some(selected_files) => get_processable_files(ctx)?
+            .into_iter()
+            .filter(|file| {
+                for select_file in selected_files {
+                    return is_same_file(&file.out, select_file).unwrap_or(false);
+                }
+                return false;
+            })
+            .collect(),
+    };
 
-    let identities_struct = get_identities(ctx, &identities.identities_file)?;
+    if processable_files.is_empty() {
+        return Err(CmdError::NoFilesToProcess);
+    }
+
+    let identities_struct = get_identities(ctx, &identities.path_to_identities(&ctx.config_path))?;
     let identities = identities_struct.iter().map(|i| i.as_ref()).collect_vec();
 
-    if !ctx.cli.no_prompt && !confirm_action(&to_process_files, Action::Decryption) {
+    if !ctx.cli.no_prompt && !confirm_action(&processable_files, Action::Decryption) {
         return Ok(());
     };
 
     let mut files_to_delete: Vec<PathBuf> = Vec::new();
 
-    for file in to_process_files {
+    for file in processable_files {
         // Todo: Check for file existence, if does not exist,
-        match process_file(file, &identities) {
+        match process_file(&file, &identities) {
             Ok(_) => {
                 println!("decrypted: {}", file.src.display());
-                files_to_delete.push(file.get_output_path());
+                files_to_delete.push(file.out);
             }
             Err(err) => match &ctx.cli.on_failure {
                 FailurePolicy::Abort => return Err(err),
                 FailurePolicy::Ignore => {
-                    println!("ignored: {}", file.get_output_path().display());
+                    println!("ignored: {}", file.out.display());
                     continue;
                 }
                 FailurePolicy::AbortAtomic => unimplemented!(),
@@ -57,10 +73,9 @@ pub fn decrypt(
     Ok(())
 }
 
-fn process_file(file: &RawConfigFile, identities: &[&dyn age::Identity]) -> Result<(), CmdError> {
+fn process_file(file: &ProcessableFile, identities: &[&dyn age::Identity]) -> Result<(), CmdError> {
     let decrypted_content = {
-        let encrypted_content = std::fs::read(&file.get_output_path())
-            .result_with_path(Some(&file.get_output_path()))?;
+        let encrypted_content = std::fs::read(&file.out).result_with_path(Some(&file.out))?;
         get_decrypted_content(&encrypted_content, &identities)?
     };
 

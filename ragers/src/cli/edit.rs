@@ -6,9 +6,8 @@ use same_file::is_same_file;
 use crate::{
     cli::{
         IdentityArg, get_decrypted_content, get_encrypted_content, get_identities,
-        get_ragers_editor,
+        get_processable_files, get_ragers_editor,
     },
-    config::AsArmorFormat,
     context::Context,
     error::{CmdError, WithPath},
 };
@@ -23,31 +22,31 @@ pub fn edit(
         return Ok(());
     }
 
-    let matched_file = ctx
-        .config
-        .files
+    let all_processable_files = get_processable_files(ctx)?;
+    let matching_file = all_processable_files
         .iter()
-        .find(|cfg| {
-            is_same_file(&cfg.src, file_to_edit).ok().is_some_and(|p| p)
-                || is_same_file(&cfg.get_output_path(), file_to_edit)
+        .find(|file| {
+            is_same_file(&file.src, file_to_edit)
+                .ok()
+                .is_some_and(|p| p)
+                || is_same_file(&file.out, file_to_edit)
                     .ok()
                     .is_some_and(|p| p)
         })
-        .ok_or(CmdError::NoFilesToProcess)?;
+        .ok_or_else(|| CmdError::NoFilesToProcess)?;
 
-    let is_encrypted = is_same_file(&matched_file.get_output_path(), file_to_edit)
-        .result_with_path(Some(&matched_file.get_output_path()))?;
+    let is_encrypted = is_same_file(&matching_file.out, file_to_edit).is_ok();
     let file_path = if is_encrypted {
         println!("info: matching against an encrypted file");
-        &matched_file.get_output_path()
+        &matching_file.out
     } else {
         println!("info: matching against a source file");
-        &matched_file.src
+        &matching_file.src
     };
 
     let raw_content = {
         let buffer = if is_encrypted {
-            let identities = get_identities(ctx, &identities.identities_file)?;
+            let identities = get_identities(ctx, &identities.path_to_identities(&ctx.config_path))?;
             let identities_refs: Vec<&dyn age::Identity> =
                 identities.iter().map(|i| i.as_ref()).collect();
             let encrypted_content = fs::read(file_path).result_with_path(Some(file_path))?;
@@ -65,7 +64,7 @@ pub fn edit(
         })?
     };
 
-    let suffix = matched_file
+    let suffix = matching_file
         .src
         .extension()
         .map_or(".txt".to_owned(), |e| format!(".{}", e.to_string_lossy()));
@@ -94,22 +93,21 @@ pub fn edit(
         false => fs::write(file_path, new_content.as_bytes()).result_with_path(Some(file_path))?,
         true => {
             let encrypted_content = {
-                let mut stdin_guard = ctx.stdin_guard.borrow_mut();
-
-                let recipients = ctx
-                    .recipients_factory
-                    .obtain_for_file(matched_file, &mut stdin_guard)?;
-                let recipients_ref = recipients.iter().map(|r| r.as_ref()).collect_vec();
+                let recipients = matching_file
+                    .recipients
+                    .iter()
+                    .map(|r| r.as_ref())
+                    .collect_vec();
 
                 get_encrypted_content(
                     &new_content.into_bytes(),
-                    recipients_ref,
-                    matched_file.armor.as_armor_format(),
+                    &recipients,
+                    matching_file.use_armor_format,
                 )
             }?;
 
-            std::fs::write(&matched_file.get_output_path(), &encrypted_content)
-                .result_with_path(Some(&matched_file.get_output_path()))?;
+            std::fs::write(&matching_file.out, &encrypted_content)
+                .result_with_path(Some(&matching_file.out))?;
         }
     }
     Ok(())

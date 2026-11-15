@@ -8,21 +8,31 @@
     },
     {
       "args": [
-        "encrypt"
+        "${input:cmd}",
+        "${input:file}"
       ],
-      "name": "Ragers - encrypt",
+      "name": "Ragers - Interactive",
       "program": "${workspaceFolder}/target/debug/ragers",
       "request": "launch",
       "type": "lldb"
+    }
+  ],
+  "inputs": [
+    {
+      "description": "Select the command to run",
+      "id": "cmd",
+      "options": [
+        "encrypt",
+        "decrypt",
+        "edit"
+      ],
+      "type": "pickString"
     },
     {
-      "args": [
-        "decrypt"
-      ],
-      "name": "Ragers - decrypt",
-      "program": "${workspaceFolder}/target/debug/ragers",
-      "request": "launch",
-      "type": "lldb"
+      "default": "",
+      "description": "File to pass to the command, if necessary",
+      "id": "file",
+      "type": "promptString"
     }
   ],
   "version": "0.2.0"

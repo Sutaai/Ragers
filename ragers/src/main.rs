@@ -1,4 +1,5 @@
 use clap::{CommandFactory, Parser};
+use ragers::libconfig::get_closest_config_path;
 
 use crate::{
     cli::{Cli, cmd},
@@ -25,40 +26,33 @@ fn main() {
 }
 
 fn wrap_execution(cli: Cli) -> Result<(), CmdError> {
-    match &cli.command {
-        None => {
-            Cli::command().print_help().unwrap();
-            return Ok(());
-        }
-        _ => {}
+    if cli.command.is_none() {
+        Cli::command().print_help().unwrap();
+        return Ok(());
     }
 
     let config_path = {
         if let Some(custom_config_path) = &cli.config_path {
             custom_config_path.clone()
         } else {
-            let working_dir = std::env::current_dir().result_with_path(None)?;
-            let yaml_ver = working_dir.join(".ragers.yaml");
-            let yml_ver = working_dir.join(".ragers.yml");
-            if std::fs::exists(&yaml_ver).result_with_path(Some(&yaml_ver))? {
-                yaml_ver
-            } else if std::fs::exists(&yml_ver).result_with_path(Some(&yml_ver))? {
-                yml_ver
-            } else {
-                return Err(CmdError::Io {
-                    source: std::io::Error::new(
-                        std::io::ErrorKind::NotFound,
-                        "no config file found",
-                    ),
-                    path: None,
-                });
+            match get_closest_config_path().result_with_path(None)? {
+                Some(path) => path,
+                None => {
+                    return Err(CmdError::Io {
+                        source: std::io::Error::new(
+                            std::io::ErrorKind::NotFound,
+                            "no config file found",
+                        ),
+                        path: None,
+                    });
+                }
             }
         }
     };
 
     let config = RawConfig::new(&config_path)?;
 
-    let ctx = context::Context::new(cli, &config)?;
+    let ctx = context::Context::new(cli, &config, config_path)?;
 
     match &ctx.cli.command {
         Some(cli::Commands::Encrypt { files, no_delete }) => cmd::encrypt(&ctx, files, no_delete)?,

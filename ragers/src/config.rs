@@ -1,13 +1,12 @@
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use age::cli_common::read_recipients;
-use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::error::{ConfigError, ConfigValidationError, NotFound, RecipientsFactoryError};
+use crate::error::{ConfigError, NotFound, RecipientsFactoryError};
 
 /// Struct representation of the Ragers config file. Used for deserialization.
 #[derive(Serialize, Deserialize)]
@@ -17,6 +16,18 @@ pub struct RawConfig {
     /// A list of files to encrypt
     #[serde(default)]
     pub files: Vec<RawConfigFile>,
+}
+
+impl RawConfig {
+    /// Creates a new instance of [`RawConfig`] by reading the file at `config_path`.
+    ///
+    /// This function will read the path it is given and attempt to deserialize it through their
+    /// structs representation.
+    pub fn new(config_path: &Path) -> Result<Self, ConfigError> {
+        let builder = config::Config::builder().add_source(config::File::from(config_path));
+
+        builder.build()?.try_deserialize().map_err(|err| err.into())
+    }
 }
 
 /// Struct representation of recipients definition in the config file. Part of [`RawConfig`].
@@ -49,7 +60,7 @@ pub struct RawConfigFile {
 }
 
 impl RawConfigFile {
-    pub fn get_output_path(&self) -> PathBuf {
+    fn get_output_path(&self) -> PathBuf {
         match &self.out {
             Some(path) => path.clone(),
             None => self.src.with_added_extension(".age"),
@@ -57,235 +68,36 @@ impl RawConfigFile {
     }
 }
 
-pub trait AsArmorFormat {
-    /// Returns the corresponding [`age::armor::Format`] based on the value we have.
-    /// If this is [`true`], then [`age::armor::Format::AsciiArmor`] is returned. Else,
-    /// [`age::armor::Format::Binary`] is returned.
-    ///
-    /// This is the equivalent of making an if check and returning the corresponding format.
-    fn as_armor_format(&self) -> age::armor::Format;
-}
-
-impl AsArmorFormat for bool {
-    fn as_armor_format(&self) -> age::armor::Format {
-        if *self {
-            age::armor::Format::AsciiArmor
-        } else {
-            age::armor::Format::Binary
-        }
-    }
-}
-
-impl RawConfig {
-    /// Creates a new instance of [`RawConfig`] by reading the file at `config_path`.
-    ///
-    /// This function will read the path it is given and attempt to deserialize it through their
-    /// structs representation.
-    pub fn new(config_path: &Path) -> Result<Self, ConfigError> {
-        let builder = config::Config::builder().add_source(config::File::from(config_path));
-
-        RawConfig::new_from_builder(builder)
-    }
-
-    /// Builds the config directly from a [`config::ConfigBuilder`]. This allow for extra tweaking
-    /// when parsing the config.
-    ///
-    /// This is mostly used for testing purposes, to test specific cases through setting
-    /// [`config::ConfigBuilder::set_override`] or [`config::ConfigBuilder::set_default`].
-    /// If you wish to build config directly from a file path instead without having to create the
-    /// builder yourself, use [`RawConfig::new`] instead. This is the preferred public method to
-    /// use.
-    pub fn new_from_builder(
-        builder: config::ConfigBuilder<config::builder::DefaultState>,
-    ) -> Result<Self, ConfigError> {
-        match builder.build()?.try_deserialize() {
-            Ok(config) => match ConfigValidator.validate(&config) {
-                Ok(_) => Ok(config),
-                Err(errs) => Err(ConfigError::from(errs)),
-            },
-            Err(err) => Err(ConfigError::from(err)),
-        }
-    }
-}
-
-/// Type that must be returned by each validating functions in `ConfigValidator`.
-type ConfCheckResult = Result<(), ConfigValidationError>;
-
-/// Struct aiming to validate [`RawConfig`] values.
+/// A ProcessableFile represent a file that can be processed to be either encrypted or decrypted.
+/// It is a standalone struct that contains all information required in order to complete
+/// processing without any additional infos.
 ///
-/// The [`ConfigValidator`] aims to validate a given [`RawConfig`] through the
-/// [`ConfigValidator::validate.`] function to ensure the file is valid and will not prompt any error
-/// during the program's execution.
-///
-/// Thus, once validated, it should be safe to use [`RawConfig`] and references made in it should be
-/// safe.
-pub struct ConfigValidator;
+/// In constrast to [`config::RawConfigFile`], this type is ready for code execution and does not
+/// represent the content of the config file as data has been prepared and may have been virtually
+/// modified for further use.
+pub struct ProcessableFile {
+    /// Source of the file to process (decrypted content)
+    pub src: PathBuf,
+    /// Output of processed file (encrypted content)
+    pub out: PathBuf,
+    /// Recipients that have the ability to decrypt this file
+    pub recipients: Vec<Rc<dyn age::Recipient>>,
+    /// Indicate if the file should be encrypted in armor format.
+    pub use_armor_format: bool,
+}
 
-impl ConfigValidator {
-    pub fn validate(self, config: &RawConfig) -> Result<(), Vec<ConfigValidationError>> {
-        let mut all_errors: Vec<ConfigValidationError> = Vec::new();
-
-        for check in [
-            self.check_recipients_age_valid(config),
-            self.check_recipients_value_unique(config),
-            self.check_recipients_file_valid_path(config),
-            self.check_groups_valid_recipients(config),
-            self.check_files_unique_source(config),
-            self.check_files_unique_destination(config),
-            self.check_files_valid_recipients(config),
-            self.check_files_recipients_unique(config),
-        ] {
-            match check {
-                Ok(_) => {}
-                Err(err) => all_errors.push(err),
-            }
+impl ProcessableFile {
+    pub fn new(
+        base_processing_path: &Path,
+        raw_config_file: &RawConfigFile,
+        recipients: &[Rc<dyn age::Recipient>],
+    ) -> Self {
+        Self {
+            src: base_processing_path.join(raw_config_file.src.clone()),
+            out: base_processing_path.join(raw_config_file.get_output_path()),
+            recipients: recipients.to_vec(),
+            use_armor_format: raw_config_file.armor,
         }
-
-        if all_errors.is_empty() {
-            Ok(())
-        } else {
-            Err(all_errors)
-        }
-    }
-
-    fn check_recipients_age_valid(&self, config: &RawConfig) -> ConfCheckResult {
-        let mut fake_guard = age::cli_common::StdinGuard::new(false);
-        let recipients = &config.recipients.direct;
-        let recipients_factory = RecipientsFactory::new(&config.recipients);
-
-        for (alias, raw_recipient) in recipients {
-            match recipients_factory.get_or_store_recipient(raw_recipient, &mut fake_guard) {
-                Ok(_) => {}
-                Err(err) => {
-                    return Err(ConfigValidationError::InvalidRecipient {
-                        key: alias.to_owned(),
-                        parse_error: err,
-                    });
-                }
-            };
-        }
-
-        Ok(())
-    }
-
-    fn check_recipients_value_unique(&self, config: &RawConfig) -> ConfCheckResult {
-        let recipients = &config.recipients.direct;
-        let mut seen: HashSet<&String> = HashSet::new();
-
-        for recipient in recipients.values() {
-            if !seen.insert(recipient) {
-                return Err(ConfigValidationError::DuplicatedRecipient {
-                    value: recipient.to_owned(),
-                });
-            }
-        }
-
-        Ok(())
-    }
-
-    fn check_recipients_file_valid_path(&self, config: &RawConfig) -> ConfCheckResult {
-        let files = &config.recipients.files;
-
-        for (alias, path) in files {
-            if !path.exists() {
-                return Err(ConfigValidationError::RecipientsFileNotFound {
-                    key: alias.to_owned(),
-                    path: path
-                        .to_str()
-                        .expect("Could not convert path to str")
-                        .to_owned(),
-                });
-            }
-        }
-
-        Ok(())
-    }
-
-    fn check_groups_valid_recipients(&self, config: &RawConfig) -> ConfCheckResult {
-        let groups = &config.recipients.groups;
-        let recipients: &Vec<&String> = &config.recipients.direct.keys().collect();
-
-        for (group, members) in groups {
-            for member in members {
-                if !recipients.contains(&member) {
-                    return Err(ConfigValidationError::RecipientInGroupNotFound {
-                        group: group.to_owned(),
-                        alias: member.to_owned(),
-                    });
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    fn check_files_unique_source(&self, config: &RawConfig) -> ConfCheckResult {
-        let files = &config.files;
-        let mut seen: HashSet<&PathBuf> = HashSet::new();
-
-        for (index, file) in files.iter().enumerate() {
-            if !seen.insert(&file.src) {
-                return Err(ConfigValidationError::FileDuplicatedSource {
-                    index,
-                    path: file.src.clone(),
-                });
-            }
-        }
-
-        Ok(())
-    }
-
-    fn check_files_unique_destination(&self, config: &RawConfig) -> ConfCheckResult {
-        let files = &config.files;
-        let mut seen: HashSet<PathBuf> = HashSet::new();
-
-        for (index, file) in files.iter().enumerate() {
-            if !seen.insert(file.get_output_path()) {
-                return Err(ConfigValidationError::FileDuplicatedDestination {
-                    index,
-                    path: file.get_output_path(),
-                });
-            }
-        }
-
-        Ok(())
-    }
-
-    fn check_files_valid_recipients(&self, config: &RawConfig) -> ConfCheckResult {
-        let recipients_factory = RecipientsFactory::new(&config.recipients);
-        let mut fake_guard = age::cli_common::StdinGuard::new(false);
-
-        for (index, file) in config.files.iter().enumerate() {
-            for unparsed_recipient in &file.recipients {
-                match recipients_factory.obtain_for_alias(unparsed_recipient, &mut fake_guard) {
-                    Ok(_) => {}
-                    Err(_) => {
-                        return Err(ConfigValidationError::FileAliasNotFound {
-                            index,
-                            alias: unparsed_recipient.to_owned(),
-                        });
-                    }
-                };
-            }
-        }
-
-        Ok(())
-    }
-
-    fn check_files_recipients_unique(&self, config: &RawConfig) -> ConfCheckResult {
-        for (index, file) in config.files.iter().enumerate() {
-            let mut recipients: Vec<&String> =
-                file.recipients.iter().duplicates().dedup().collect();
-            if !recipients.is_empty() {
-                let first = recipients.swap_remove(0);
-                return Err(ConfigValidationError::FileAliasDuplicated {
-                    index,
-                    alias: first.to_owned(),
-                });
-            }
-        }
-
-        Ok(())
     }
 }
 
@@ -314,7 +126,7 @@ fn get_alias_kind(alias: &str) -> AliasKind {
 /// This function will convert a recipients file by reading it to a list of supported
 /// recipients that may be used.
 fn read_recipients_file(file: &PathBuf) -> Result<Vec<String>, std::io::Error> {
-    let mut parsed_recipients: Vec<String> = Vec::new();
+    let mut found_recipients: Vec<String> = Vec::new();
 
     let content = std::fs::read_to_string(file)?;
     for line in content.lines() {
@@ -324,10 +136,10 @@ fn read_recipients_file(file: &PathBuf) -> Result<Vec<String>, std::io::Error> {
             continue;
         }
 
-        parsed_recipients.push(line.to_owned());
+        found_recipients.push(line.to_owned());
     }
 
-    Ok(parsed_recipients)
+    Ok(found_recipients)
 }
 
 /// The [`RecipientsFactory`] implement logic for looking up recipients and returning their
@@ -341,6 +153,8 @@ fn read_recipients_file(file: &PathBuf) -> Result<Vec<String>, std::io::Error> {
 /// assumed implementation as it is assumed the impact is not severe enough in the usage of the
 /// tool to be an issue.
 pub struct RecipientsFactory<'config> {
+    /// Path to the config file
+    config_path: PathBuf,
     /// Recipients part of the config file.
     config_recipients: &'config RawConfigRecipients,
     /// Cache containing age direct recipients. Key: age recipient as string.
@@ -350,8 +164,9 @@ pub struct RecipientsFactory<'config> {
 
 impl<'config> RecipientsFactory<'config> {
     /// Return a new instance of [`RecipientsFactory`].
-    pub fn new(recipients: &'config RawConfigRecipients) -> Self {
+    pub fn new(config_path: &Path, recipients: &'config RawConfigRecipients) -> Self {
         Self {
+            config_path: config_path.to_path_buf(),
             config_recipients: recipients,
             age_recipients_cache: RefCell::new(HashMap::new()),
         }
@@ -436,8 +251,12 @@ impl<'config> RecipientsFactory<'config> {
             .get(config_key)
             .ok_or_else(|| NotFound::config_file(config_key))?;
 
+        let base_path = self
+            .config_path
+            .parent()
+            .expect("same shit as before, you're... not supposed to have that error...");
         // Note: This could use some extra optimization to avoid reading the file each iteration
-        let file_content = read_recipients_file(file_path)?;
+        let file_content = read_recipients_file(&base_path.join(file_path))?;
 
         for age_recipient_str in &file_content {
             let recipient = self.get_or_store_recipient(age_recipient_str, stdin_guard)?;

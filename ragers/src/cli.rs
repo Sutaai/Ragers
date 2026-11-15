@@ -1,17 +1,16 @@
 use std::{
-    fmt::Display,
+    borrow::Borrow,
     io::{Read, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use inquire::Confirm;
 use itertools::Itertools;
-use same_file::is_same_file;
 use which::which;
 
 use crate::{
-    config::RawConfigFile,
+    config::ProcessableFile,
     context::Context,
     error::{CmdError, DecryptionError, EncryptionError},
 };
@@ -128,7 +127,7 @@ pub enum Commands {
             action = clap::ArgAction::Set,
             value_hint = clap::ValueHint::FilePath,
             value_parser = clap::value_parser!(PathBuf),
-            required = false
+            required = true
         )]
         file: PathBuf,
 
@@ -167,55 +166,51 @@ pub struct IdentityArg {
         long = "identity-file",
         action = clap::ArgAction::Append,
         env = "RAGERS_IDENTITIES_FILE",
-        default_value = ".identity",
+        default_value = None,
         help = "Paths to one or multiple identities file used to decrypt files. Repeat to use multiple.",
         value_hint = clap::ValueHint::FilePath,
         value_parser = clap::value_parser!(PathBuf),
-        long_help = "Path to a file containing one or more private keys (age identities, or a single SSH private key) used to decrypt files. This flag may be repeated to supply multiple identities; all of them will be tried against every encrypted file."
+        long_help = "Path to a file containing one or more private keys (age identities, or a single SSH private key) used to decrypt files. This flag may be repeated to supply multiple identities; all of them will be tried against every encrypted file.",
+        required = false,
     )]
-    pub identities_file: Vec<PathBuf>,
+    pub identities_file: Option<Vec<PathBuf>>,
 }
 
-/// Filters and returns a vector of files to process based on the requested files from the user.
-///
-/// If `requested_files` is `None`, all files from the context's configuration are returned.
-/// If `requested_files` is `Some`, only the configuration files that match the requested paths
-/// are returned. Path comparison is done using [`is_same_path`].
-///
-/// This function does not check for path existence or does not make any check at all. It only
-/// exists as a filter from the files set in config and what's been requested.
-///
-/// This may return a [`CmdError`] error variant in the case that there are no files that have
-/// matched the search, or if no files have been configured in the config file.
-fn obtain_files_to_process<'ctx>(
-    ctx: &'ctx Context,
-    requested_files: &Option<Vec<PathBuf>>,
-) -> Result<Vec<&'ctx RawConfigFile>, CmdError> {
-    let files: Vec<&'ctx RawConfigFile> = match requested_files {
-        None => ctx.config.files.iter().collect(),
-        Some(requested) => ctx
-            .config
-            .files
-            .iter()
-            .filter(|config_file| {
-                for one_requested_path in requested {
-                    if is_same_file(one_requested_path, &config_file.src)
-                        .ok()
-                        .is_some_and(|p| p)
-                    {
-                        return true;
-                    }
-                }
-                false
-            })
-            .collect(),
-    };
-
-    if files.is_empty() {
-        return Err(CmdError::NoFilesToProcess);
+impl IdentityArg {
+    pub fn path_to_identities(&self, config_path: &Path) -> Vec<PathBuf> {
+        match &self.identities_file {
+            None => {
+                return vec![
+                    config_path
+                        .parent()
+                        .expect("same stuff as usual, you're REALLY not supposed to be here.")
+                        .join(".identity"),
+                ];
+            }
+            Some(paths) => return paths.clone(),
+        }
     }
+}
 
-    Ok(files)
+/// Obtain a list of processable files.
+pub fn get_processable_files(ctx: &Context) -> Result<Vec<ProcessableFile>, CmdError> {
+    let config_base_path = &ctx
+        .config_path
+        .parent()
+        .expect("config file must be contained in a folder. how the fuck did you hit this?");
+
+    Ok(ctx
+        .config
+        .files
+        .iter()
+        .map(|file| {
+            let recipients = ctx
+                .recipients_factory
+                .obtain_for_file(file, &mut ctx.stdin_guard.borrow_mut())
+                .expect("could not find recipients for file");
+            ProcessableFile::new(config_base_path, file, &recipients)
+        })
+        .collect())
 }
 
 /// Attempt to decrypt an encrypted content buffer.
@@ -249,13 +244,17 @@ fn get_decrypted_content(
 /// In the case the decryption could have not been completed, [`EncryptionError`] is returned.
 fn get_encrypted_content(
     raw_content: &[u8],
-    recipients: Vec<&dyn age::Recipient>,
-    format: age::armor::Format,
+    recipients: &[&dyn age::Recipient],
+    use_armor_format: bool,
 ) -> Result<Vec<u8>, EncryptionError> {
     let mut encrypted_content: Vec<u8> = Vec::new();
 
-    let encryptor = age::Encryptor::with_recipients(recipients.into_iter())?;
+    let encryptor = age::Encryptor::with_recipients(recipients.into_iter().copied())?;
 
+    let format = match use_armor_format {
+        false => age::armor::Format::Binary,
+        true => age::armor::Format::AsciiArmor,
+    };
     let mut decryptor = encryptor.wrap_output(age::armor::ArmoredWriter::wrap_output(
         &mut encrypted_content,
         format,
@@ -272,32 +271,34 @@ enum Action {
     Decryption,
 }
 
-impl Display for Action {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Action::Encryption => write!(f, "encrypt"),
-            Action::Decryption => write!(f, "decrypt"),
-        }
-    }
-}
-
 /// Reusable wrapper to request the user if they are confirming encryption/decryption.
 /// This output a list of files that will be processed, request a yes or no from the user, and
 /// return the value to the caller, in which they decide what to do next.
-fn confirm_action(files: &[&RawConfigFile], action: Action) -> bool {
+fn confirm_action<F: Borrow<ProcessableFile>>(files: &[F], action: Action) -> bool {
     let files_displayed: String = files
         .iter()
         .map(|path| match action {
-            Action::Encryption => format!("\t- {}", path.src.display()),
-            Action::Decryption => format!("\t- {}", path.get_output_path().display()),
+            Action::Encryption => format!("\t- {}", path.borrow().src.display()),
+            Action::Decryption => format!("\t- {}", path.borrow().out.display()),
         })
         .join("\n");
 
-    let confirm_str = format!(
-        "There are {} files to {action}:\n{}\nProceed?",
-        files.len(),
-        files_displayed
-    );
+    let confirm_str = match action {
+        Action::Encryption => {
+            format!(
+                "There are {} files to encrypt:\n{}\nProceed?",
+                files.len(),
+                files_displayed
+            )
+        }
+        Action::Decryption => {
+            format!(
+                "There are {} files to decrypt:\n{}\nProceed?",
+                files.len(),
+                files_displayed
+            )
+        }
+    };
 
     Confirm::new(&confirm_str)
         .with_default(true)

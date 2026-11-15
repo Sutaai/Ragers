@@ -1,11 +1,14 @@
 use std::{fs, path::PathBuf};
 
+use itertools::Itertools;
+use same_file::is_same_file;
+
 use crate::{
     cli::{
         Action, FailurePolicy, NoDeleteArg, confirm_action, get_encrypted_content,
-        obtain_files_to_process,
+        get_processable_files,
     },
-    config::AsArmorFormat,
+    config::ProcessableFile,
     context::Context,
     error::{CmdError, WithPath},
 };
@@ -15,20 +18,34 @@ pub fn encrypt(
     files_to_encrypt: &Option<Vec<PathBuf>>,
     no_delete: &NoDeleteArg,
 ) -> Result<(), CmdError> {
-    let to_process_files = obtain_files_to_process(ctx, files_to_encrypt)?;
+    let processable_files = match files_to_encrypt {
+        None => get_processable_files(ctx)?,
+        Some(selected_files) => get_processable_files(ctx)?
+            .into_iter()
+            .filter(|file| {
+                for select_file in selected_files {
+                    return is_same_file(&file.src, select_file).unwrap_or(false);
+                }
+                return false;
+            })
+            .collect(),
+    };
 
-    if !ctx.cli.no_prompt && !confirm_action(&to_process_files, Action::Encryption) {
+    if processable_files.is_empty() {
+        return Err(CmdError::NoFilesToProcess);
+    }
+
+    if !ctx.cli.no_prompt && !confirm_action(&processable_files, Action::Encryption) {
         return Ok(());
     }
 
-    let mut stdin_guard = ctx.stdin_guard.borrow_mut();
-    let mut files_to_delete: Vec<&PathBuf> = Vec::new();
+    let mut files_to_delete: Vec<PathBuf> = Vec::new();
 
-    for file in to_process_files {
-        match process_file(ctx, &mut stdin_guard, file) {
+    for file in processable_files {
+        match process_file(&file) {
             Ok(_) => {
-                println!("encrypted: {}", file.get_output_path().display());
-                files_to_delete.push(&file.src);
+                println!("encrypted: {}", file.out.display());
+                files_to_delete.push(file.src);
             }
             Err(err) => match &ctx.cli.on_failure {
                 FailurePolicy::Abort => return Err(err),
@@ -51,24 +68,14 @@ pub fn encrypt(
     Ok(())
 }
 
-fn process_file(
-    ctx: &Context,
-    stdin_guard: &mut std::cell::RefMut<'_, age::cli_common::StdinGuard>,
-    file: &crate::config::RawConfigFile,
-) -> Result<(), CmdError> {
-    let recipients = ctx.recipients_factory.obtain_for_file(file, stdin_guard)?;
-    let recipient_refs: Vec<&dyn age::Recipient> = recipients.iter().map(|r| r.as_ref()).collect();
+fn process_file(file: &ProcessableFile) -> Result<(), CmdError> {
+    let recipients_refs = file.recipients.iter().map(|i| i.as_ref()).collect_vec();
     let encrypted_content = {
         let encrypted_content = std::fs::read(&file.src).result_with_path(Some(&file.src))?;
-        get_encrypted_content(
-            &encrypted_content,
-            recipient_refs,
-            file.armor.as_armor_format(),
-        )?
+        get_encrypted_content(&encrypted_content, &recipients_refs, file.use_armor_format)?
     };
 
-    std::fs::write(&file.get_output_path(), &encrypted_content)
-        .result_with_path(Some(&file.get_output_path()))?;
+    std::fs::write(&file.out, &encrypted_content).result_with_path(Some(&file.out))?;
 
     Ok(())
 }
