@@ -2,8 +2,9 @@ use std::cell::RefCell;
 use std::path::PathBuf;
 
 use crate::cli::Cli;
-use crate::config::{RawConfig, RecipientsFactory};
+use crate::config::RecipientsFactory;
 use crate::error::CmdError;
+use ragers::libconfig::RawConfig;
 
 pub struct Context<'config> {
     pub cli: Cli,

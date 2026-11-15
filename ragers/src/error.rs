@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use ragers::libconfig::ConfigError;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -18,12 +19,6 @@ impl NotFound {
     pub fn config_file(file: &str) -> Self {
         NotFound(format!("file in config not found: {file}").to_owned())
     }
-}
-
-#[derive(Error, Debug)]
-pub enum ConfigError {
-    #[error("could not build config file: {0}")]
-    ParseError(#[from] config::ConfigError),
 }
 
 #[derive(Error, Debug)]

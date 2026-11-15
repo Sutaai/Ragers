@@ -1,11 +1,11 @@
 use clap::{CommandFactory, Parser};
-use ragers::libconfig::get_closest_config_path;
 
 use crate::{
     cli::{Cli, cmd},
-    config::RawConfig,
+    config::get_closest_config_path,
     error::{CmdError, WithPath},
 };
+use ragers::libconfig::RawConfig;
 
 mod cli;
 mod config;
@@ -62,9 +62,7 @@ fn wrap_execution(cli: Cli) -> Result<(), CmdError> {
             no_delete,
         }) => cmd::decrypt(&ctx, files, identity, no_delete)?,
         Some(cli::Commands::Edit { file, identity }) => cmd::edit(&ctx, file, identity)?,
-        None => {
-            Cli::command().print_help().unwrap();
-        }
+        None => panic!("can't be reached"),
     };
 
     Ok(())

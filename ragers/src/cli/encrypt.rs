@@ -8,10 +8,10 @@ use crate::{
         Action, FailurePolicy, NoDeleteArg, confirm_action, get_encrypted_content,
         get_processable_files,
     },
-    config::ProcessableFile,
     context::Context,
     error::{CmdError, WithPath},
 };
+use ragers::libconfig::ProcessableFile;
 
 pub fn encrypt(
     ctx: &Context,

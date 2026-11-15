@@ -10,10 +10,10 @@ use itertools::Itertools;
 use which::which;
 
 use crate::{
-    config::ProcessableFile,
     context::Context,
     error::{CmdError, DecryptionError, EncryptionError},
 };
+use ragers::libconfig::ProcessableFile;
 
 mod decrypt;
 mod edit;

@@ -8,10 +8,10 @@ use crate::{
         Action, FailurePolicy, IdentityArg, NoDeleteArg, confirm_action, get_decrypted_content,
         get_identities, get_processable_files,
     },
-    config::ProcessableFile,
     context::Context,
     error::{CmdError, WithPath},
 };
+use ragers::libconfig::ProcessableFile;
 
 pub fn decrypt(
     ctx: &Context,
