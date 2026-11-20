@@ -1,0 +1,19 @@
+#:schema https://www.schemastore.org/cargo.json
+
+[package]
+name = "ragers-core"
+description = "Ragers - Core implementation of shared logic"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+repository.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+age = { version = "0.12.1", features = ["armor"] }
+glob = "0.3.4"
+serde = { version = "1.0.229", features = ["derive"] }
+serde-saphyr = "2.2.0"
+thiserror = "2.0.21"

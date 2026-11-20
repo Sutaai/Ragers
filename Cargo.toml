@@ -1,11 +1,13 @@
 #:schema https://www.schemastore.org/cargo.json
 
 [workspace]
-members = ["ragers", "ragers-hook-check-decrypted"]
+members = ["ragers", "ragers-core", "ragers-hook-check-decrypted"]
 default-members = ["ragers"]
 resolver = "3"
 
 [workspace.package]
+# This is the version of Ragers
+version = "0.3.0-dev2"
 edition = "2024"
 rust-version = "1.96"
 readme = "README.md"

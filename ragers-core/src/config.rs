@@ -5,37 +5,44 @@ use std::rc::Rc;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+/// List of usable character to make up a glob pattern
+const GLOB_META_CHARS: [char; 3] = ['*', '?', '['];
+
 #[derive(Error, Debug)]
 pub enum ConfigError {
-    #[error("could not build config file: {0}")]
-    ParseError(#[from] config::ConfigError),
+    /// A [`ConfigError::BuildError`] is threw whenever it is impossible for Ragers to create the
+    /// config struct and load it into Rust code. Considering this error, it should be impossible
+    /// to continue forward if the config cannot be loaded. In ragers-core, there will be no other
+    /// way attempted to load the config than by using [`RawConfig::new`], which attempt to
+    /// deserialize
+    #[error("could not build config: {0}")]
+    BuildError(#[from] serde_saphyr::Error),
+
+    /// This will later be used for glob validation.
+    #[error("invalid src at `{0}`: {1}")]
+    InvalidSrc(String, String),
 }
 
 /// Struct representation of the Ragers config file. Used for deserialization.
 #[derive(Serialize, Deserialize)]
-pub struct RawConfig {
+pub struct ConfigContent {
     /// A list of pre-defined recipients
-    pub recipients: RawConfigRecipients,
+    pub recipients: ConfigContentRecipients,
     /// A list of files to encrypt
     #[serde(default)]
-    pub files: Vec<RawConfigFile>,
+    pub files: Vec<ConfigContentFile>,
 }
 
-impl RawConfig {
-    /// Creates a new instance of [`RawConfig`] by reading the file at `config_path`.
-    ///
-    /// This function will read the path it is given and attempt to deserialize it through their
-    /// structs representation.
-    pub fn new(config_path: &Path) -> Result<Self, ConfigError> {
-        let builder = config::Config::builder().add_source(config::File::from(config_path));
-
-        builder.build()?.try_deserialize().map_err(|err| err.into())
+impl ConfigContent {
+    /// Creates a new instance of [`ConfigContent`] by reading `content`.
+    pub fn from_str(content: &str) -> Result<Self, ConfigError> {
+        serde_saphyr::from_str(content).map_err(|err| ConfigError::from(err))
     }
 }
 
-/// Struct representation of recipients definition in the config file. Part of [`RawConfig`].
+/// Struct representation of recipients definition in the config file. Part of [`ConfigContent`].
 #[derive(Serialize, Deserialize)]
-pub struct RawConfigRecipients {
+pub struct ConfigContentRecipients {
     /// A list of recipients that may be used to encrypt and/or decrypt files
     #[serde(flatten, rename = "recipients")]
     pub direct: HashMap<String, String>,
@@ -48,9 +55,9 @@ pub struct RawConfigRecipients {
 }
 
 /// Struct representation of files (to encrypt/decrypt) definition in the config file. Part of
-/// [`RawConfig`].
+/// [`ConfigContent`].
 #[derive(Serialize, Deserialize)]
-pub struct RawConfigFile {
+pub struct ConfigContentFile {
     /// The path of the unencrypted file source
     pub src: PathBuf,
     /// The path to the encrypted file output
@@ -62,12 +69,28 @@ pub struct RawConfigFile {
     pub armor: bool,
 }
 
-impl RawConfigFile {
-    fn get_output_path(&self) -> PathBuf {
-        match &self.out {
-            Some(path) => path.clone(),
-            None => self.src.with_added_extension(".age"),
-        }
+pub struct ConfigFile {
+    /// The path to the config file.
+    pub path: PathBuf,
+
+    /// Parent path of `path`. This exists in order to avoid having to recheck for parent's
+    /// optional possibility.
+    pub base_path: PathBuf,
+
+    /// The deserialized content of the config file.
+    pub content: ConfigContent,
+}
+
+impl ConfigFile {
+    pub fn new(path: &Path, content: ConfigContent) -> Self {
+        return Self {
+            path: path.to_path_buf(),
+            base_path: path
+                .parent()
+                .expect("config file path should have a parent")
+                .to_path_buf(),
+            content: content,
+        };
     }
 }
 
@@ -75,7 +98,7 @@ impl RawConfigFile {
 /// It is a standalone struct that contains all information required in order to complete
 /// processing without any additional infos.
 ///
-/// In constrast to [`config::RawConfigFile`], this type is ready for code execution and does not
+/// In contrast to [`ConfigContentFile`], this type is ready for code execution and does not
 /// represent the content of the config file as data has been prepared and may have been virtually
 /// modified for further use.
 pub struct ProcessableFile {
@@ -90,16 +113,18 @@ pub struct ProcessableFile {
 }
 
 impl ProcessableFile {
+    /// Creates a new [`ProcessableFile`] instance.
     pub fn new(
-        base_processing_path: &Path,
-        raw_config_file: &RawConfigFile,
+        source_path: &Path,
+        output_path: &Path,
         recipients: &[Rc<dyn age::Recipient>],
+        use_armor_format: &bool,
     ) -> Self {
         Self {
-            src: base_processing_path.join(raw_config_file.src.clone()),
-            out: base_processing_path.join(raw_config_file.get_output_path()),
+            src: source_path.to_path_buf(),
+            out: output_path.to_path_buf(),
             recipients: recipients.to_vec(),
-            use_armor_format: raw_config_file.armor,
+            use_armor_format: use_armor_format.clone(),
         }
     }
 }
@@ -114,6 +139,10 @@ pub enum AliasKind {
     Group(String),
 }
 
+/// Obtain the kind of alias a string refers to. This can be used to obtain the corresponding
+/// recipient(s) in a config file.
+///
+/// See [`AliasKind`] for the existing aliases.
 pub fn get_alias_kind(alias: &str) -> AliasKind {
     if let Some(stripped) = alias.strip_prefix("file:") {
         AliasKind::RecipientsFile(stripped.to_owned())
@@ -121,5 +150,14 @@ pub fn get_alias_kind(alias: &str) -> AliasKind {
         AliasKind::Group(stripped.to_owned())
     } else {
         AliasKind::DirectRecipient(alias.to_owned())
+    }
+}
+
+/// Attempt to check if a given string `source` can and should be interpreted as a glob pattern.
+fn is_potential_glob(source: &str) -> bool {
+    if source.contains(GLOB_META_CHARS) {
+        glob::Pattern::new(source).map(|_| true).unwrap_or(false)
+    } else {
+        false
     }
 }

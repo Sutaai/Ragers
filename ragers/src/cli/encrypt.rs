@@ -11,7 +11,7 @@ use crate::{
     context::Context,
     error::{CmdError, WithPath},
 };
-use ragers::libconfig::ProcessableFile;
+use ragers_core::config::ProcessableFile;
 
 pub fn encrypt(
     ctx: &Context,

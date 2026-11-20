@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use age::cli_common::read_recipients;
-use ragers::libconfig::{AliasKind, RawConfigFile, RawConfigRecipients, get_alias_kind};
+use ragers_core::config::{AliasKind, ConfigContentFile, ConfigContentRecipients, get_alias_kind};
 
 use crate::error::{NotFound, RecipientsFactoryError};
 
@@ -67,9 +67,9 @@ fn read_recipients_file(file: &PathBuf) -> Result<Vec<String>, std::io::Error> {
 /// tool to be an issue.
 pub struct RecipientsFactory<'config> {
     /// Path to the config file
-    config_path: PathBuf,
+    config_base_path: PathBuf,
     /// Recipients part of the config file.
-    config_recipients: &'config RawConfigRecipients,
+    config_recipients: &'config ConfigContentRecipients,
     /// Cache containing age direct recipients. Key: age recipient as string.
     /// Value: struct [`age::Recipient`]
     age_recipients_cache: RefCell<HashMap<String, Rc<dyn age::Recipient>>>,
@@ -77,9 +77,12 @@ pub struct RecipientsFactory<'config> {
 
 impl<'config> RecipientsFactory<'config> {
     /// Return a new instance of [`RecipientsFactory`].
-    pub fn new(config_path: &Path, recipients: &'config RawConfigRecipients) -> Self {
+    ///
+    /// `config_base_path` must point to the folder where the config file is contained. This is
+    /// used in the case a recipients file must be read.
+    pub fn new(config_base_path: &Path, recipients: &'config ConfigContentRecipients) -> Self {
         Self {
-            config_path: config_path.to_path_buf(),
+            config_base_path: config_base_path.to_path_buf(),
             config_recipients: recipients,
             age_recipients_cache: RefCell::new(HashMap::new()),
         }
@@ -164,12 +167,8 @@ impl<'config> RecipientsFactory<'config> {
             .get(config_key)
             .ok_or_else(|| NotFound::config_file(config_key))?;
 
-        let base_path = self
-            .config_path
-            .parent()
-            .expect("same shit as before, you're... not supposed to have that error...");
         // Note: This could use some extra optimization to avoid reading the file each iteration
-        let file_content = read_recipients_file(&base_path.join(file_path))?;
+        let file_content = read_recipients_file(&self.config_base_path.join(file_path))?;
 
         for age_recipient_str in &file_content {
             let recipient = self.get_or_store_recipient(age_recipient_str, stdin_guard)?;
@@ -198,7 +197,7 @@ impl<'config> RecipientsFactory<'config> {
 
     pub fn obtain_for_file(
         &self,
-        config_file: &RawConfigFile,
+        config_file: &ConfigContentFile,
         stdin_guard: &mut age::cli_common::StdinGuard,
     ) -> Result<Vec<Rc<dyn age::Recipient>>, RecipientsFactoryError> {
         let mut fetched_recipients = Vec::new();

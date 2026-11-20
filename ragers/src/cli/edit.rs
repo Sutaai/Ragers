@@ -46,7 +46,8 @@ pub fn edit(
 
     let raw_content = {
         let buffer = if is_encrypted {
-            let identities = get_identities(ctx, &identities.path_to_identities(&ctx.config_path))?;
+            let identities =
+                get_identities(ctx, &identities.path_to_identities(&ctx.config.base_path))?;
             let identities_refs: Vec<&dyn age::Identity> =
                 identities.iter().map(|i| i.as_ref()).collect();
             let encrypted_content = fs::read(file_path).result_with_path(Some(file_path))?;

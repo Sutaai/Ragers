@@ -85,7 +85,7 @@
         },
         "out": {
           "type": "string",
-          "description": "The output path of the file you wish to encrypt."
+          "description": "The output path of the file you wish to encrypt. If not provided, default to appending \".age\" as extension to file."
         },
         "recipients": {
           "type": "array",

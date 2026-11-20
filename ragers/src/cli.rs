@@ -13,7 +13,7 @@ use crate::{
     context::Context,
     error::{CmdError, DecryptionError, EncryptionError},
 };
-use ragers::libconfig::ProcessableFile;
+use ragers_core::config::ProcessableFile;
 
 mod decrypt;
 mod edit;
@@ -177,15 +177,10 @@ pub struct IdentityArg {
 }
 
 impl IdentityArg {
-    pub fn path_to_identities(&self, config_path: &Path) -> Vec<PathBuf> {
+    pub fn path_to_identities(&self, config_base_path: &Path) -> Vec<PathBuf> {
         match &self.identities_file {
             None => {
-                vec![
-                    config_path
-                        .parent()
-                        .expect("same stuff as usual, you're REALLY not supposed to be here.")
-                        .join(".identity"),
-                ]
+                vec![config_base_path.join(".identity")]
             }
             Some(paths) => paths.clone(),
         }
@@ -194,13 +189,9 @@ impl IdentityArg {
 
 /// Obtain a list of processable files.
 pub fn get_processable_files(ctx: &Context) -> Result<Vec<ProcessableFile>, CmdError> {
-    let config_base_path = &ctx
-        .config_path
-        .parent()
-        .expect("config file must be contained in a folder. how the fuck did you hit this?");
-
     Ok(ctx
         .config
+        .content
         .files
         .iter()
         .map(|file| {
@@ -208,7 +199,22 @@ pub fn get_processable_files(ctx: &Context) -> Result<Vec<ProcessableFile>, CmdE
                 .recipients_factory
                 .obtain_for_file(file, &mut ctx.stdin_guard.borrow_mut())
                 .expect("could not find recipients for file");
-            ProcessableFile::new(config_base_path, file, &recipients)
+
+            let output_path = match &file.out {
+                Some(path) => &ctx.config.base_path.join(path),
+                None => &ctx
+                    .config
+                    .base_path
+                    .join(&file.src.with_added_extension(".age")),
+            };
+
+            ProcessableFile::new(
+                &ctx.config.base_path.join(&file.src),
+                &output_path,
+                &recipients,
+                &file.armor,
+            )
+            // ProcessableFile::new(config_base_path, file, &recipients)
         })
         .collect())
 }

@@ -1,3 +1,5 @@
+use std::fs::read_to_string;
+
 use clap::{CommandFactory, Parser};
 
 use crate::{
@@ -5,7 +7,8 @@ use crate::{
     config::get_closest_config_path,
     error::{CmdError, WithPath},
 };
-use ragers::libconfig::RawConfig;
+
+use ragers_core::config::{ConfigContent, ConfigFile};
 
 mod cli;
 mod config;
@@ -50,9 +53,15 @@ fn wrap_execution(cli: Cli) -> Result<(), CmdError> {
         }
     };
 
-    let config = RawConfig::new(&config_path)?;
+    let config_content = read_to_string(&config_path).map_err(|err| CmdError::Io {
+        source: err,
+        path: Some(config_path.clone()),
+    })?;
 
-    let ctx = context::Context::new(cli, &config, config_path)?;
+    let config_content = ConfigContent::from_str(&config_content)?;
+    let config = ConfigFile::new(&config_path, config_content);
+
+    let ctx = context::Context::new(cli, &config)?;
 
     match &ctx.cli.command {
         Some(cli::Commands::Encrypt { files, no_delete }) => cmd::encrypt(&ctx, files, no_delete)?,

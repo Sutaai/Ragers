@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use ragers::libconfig::ConfigError;
+use ragers_core::config::ConfigError;
 use thiserror::Error;
 
 #[derive(Error, Debug)]

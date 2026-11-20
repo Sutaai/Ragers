@@ -11,7 +11,7 @@ use crate::{
     context::Context,
     error::{CmdError, WithPath},
 };
-use ragers::libconfig::ProcessableFile;
+use ragers_core::config::ProcessableFile;
 
 pub fn decrypt(
     ctx: &Context,
@@ -38,7 +38,8 @@ pub fn decrypt(
         return Err(CmdError::NoFilesToProcess);
     }
 
-    let identities_struct = get_identities(ctx, &identities.path_to_identities(&ctx.config_path))?;
+    let identities_struct =
+        get_identities(ctx, &identities.path_to_identities(&ctx.config.base_path))?;
     let identities = identities_struct.iter().map(|i| i.as_ref()).collect_vec();
 
     if !ctx.cli.no_prompt && !confirm_action(&processable_files, Action::Decryption) {
