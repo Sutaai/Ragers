@@ -237,7 +237,7 @@ pub fn get_processable_files(
             .map_err(|_| ConfigError::InvalidSrc(file.src.clone()))?
         {
             // This is a glob: special logic!
-            let out_extension = file.out.clone().unwrap_or(".age".to_string());
+            let out_extension = file.out.clone().unwrap_or("age".to_string());
 
             for entry in glob_pattern {
                 let path = entry?;
@@ -258,7 +258,7 @@ pub fn get_processable_files(
             let out_path = match &file.out {
                 Some(path_str) => PathBuf::from_str(path_str)
                     .map_err(|_| ConfigError::InvalidOut(path_str.clone()))?,
-                None => src_path.with_added_extension(".age"),
+                None => src_path.with_added_extension("age"),
             };
 
             let processable_file =
