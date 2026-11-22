@@ -6,12 +6,12 @@ use same_file::is_same_file;
 use crate::{
     cli::{
         Action, FailurePolicy, IdentityArg, NoDeleteArg, confirm_action, get_decrypted_content,
-        get_identities, get_processable_files,
+        get_identities,
     },
     context::Context,
     error::{CmdError, WithPath},
 };
-use ragers_core::config::ProcessableFile;
+use ragers_core::config::{ProcessableFile, get_processable_files};
 
 pub fn decrypt(
     ctx: &Context,
@@ -20,8 +20,8 @@ pub fn decrypt(
     no_delete: &NoDeleteArg,
 ) -> Result<(), CmdError> {
     let processable_files = match files_to_decrypt {
-        None => get_processable_files(ctx)?,
-        Some(selected_files) => get_processable_files(ctx)?
+        None => get_processable_files(ctx.config, &ctx.recipients_factory)?,
+        Some(selected_files) => get_processable_files(ctx.config, &ctx.recipients_factory)?
             .into_iter()
             .filter(|file| {
                 for select_file in selected_files {

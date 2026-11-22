@@ -11,7 +11,7 @@ use which::which;
 
 use crate::{
     context::Context,
-    error::{CmdError, DecryptionError, EncryptionError},
+    error::{DecryptionError, EncryptionError},
 };
 use ragers_core::config::ProcessableFile;
 
@@ -185,38 +185,6 @@ impl IdentityArg {
             Some(paths) => paths.clone(),
         }
     }
-}
-
-/// Obtain a list of processable files.
-pub fn get_processable_files(ctx: &Context) -> Result<Vec<ProcessableFile>, CmdError> {
-    Ok(ctx
-        .config
-        .content
-        .files
-        .iter()
-        .map(|file| {
-            let recipients = ctx
-                .recipients_factory
-                .obtain_for_file(file, &mut ctx.stdin_guard.borrow_mut())
-                .expect("could not find recipients for file");
-
-            let output_path = match &file.out {
-                Some(path) => &ctx.config.base_path.join(path),
-                None => &ctx
-                    .config
-                    .base_path
-                    .join(&file.src.with_added_extension(".age")),
-            };
-
-            ProcessableFile::new(
-                &ctx.config.base_path.join(&file.src),
-                &output_path,
-                &recipients,
-                &file.armor,
-            )
-            // ProcessableFile::new(config_base_path, file, &recipients)
-        })
-        .collect())
 }
 
 /// Attempt to decrypt an encrypted content buffer.

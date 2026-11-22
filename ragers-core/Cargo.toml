@@ -12,7 +12,7 @@ license-file.workspace = true
 publish.workspace = true
 
 [dependencies]
-age = { version = "0.12.1", features = ["armor"] }
+age = { version = "0.12.1", features = ["armor", "cli-common"] }
 glob = "0.3.4"
 serde = { version = "1.0.229", features = ["derive"] }
 serde-saphyr = "2.2.0"

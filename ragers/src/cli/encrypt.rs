@@ -4,14 +4,11 @@ use itertools::Itertools;
 use same_file::is_same_file;
 
 use crate::{
-    cli::{
-        Action, FailurePolicy, NoDeleteArg, confirm_action, get_encrypted_content,
-        get_processable_files,
-    },
+    cli::{Action, FailurePolicy, NoDeleteArg, confirm_action, get_encrypted_content},
     context::Context,
     error::{CmdError, WithPath},
 };
-use ragers_core::config::ProcessableFile;
+use ragers_core::config::{ProcessableFile, get_processable_files};
 
 pub fn encrypt(
     ctx: &Context,
@@ -19,8 +16,8 @@ pub fn encrypt(
     no_delete: &NoDeleteArg,
 ) -> Result<(), CmdError> {
     let processable_files = match files_to_encrypt {
-        None => get_processable_files(ctx)?,
-        Some(selected_files) => get_processable_files(ctx)?
+        None => get_processable_files(ctx.config, &ctx.recipients_factory)?,
+        Some(selected_files) => get_processable_files(ctx.config, &ctx.recipients_factory)?
             .into_iter()
             .filter(|file| {
                 for select_file in selected_files {

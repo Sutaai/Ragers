@@ -1,9 +1,8 @@
 use std::cell::RefCell;
 
 use crate::cli::Cli;
-use crate::config::RecipientsFactory;
 use crate::error::CmdError;
-use ragers_core::config::ConfigFile;
+use ragers_core::config::{ConfigFile, RecipientsFactory};
 
 pub struct Context<'config> {
     pub cli: Cli,
@@ -14,8 +13,7 @@ pub struct Context<'config> {
 
 impl<'config> Context<'config> {
     pub fn new(cli: Cli, config: &'config ConfigFile) -> Result<Self, CmdError> {
-        let recipients_factory =
-            RecipientsFactory::new(&config.base_path, &config.content.recipients);
+        let recipients_factory = RecipientsFactory::new(config);
 
         Ok(Self {
             cli,

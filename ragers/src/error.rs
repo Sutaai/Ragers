@@ -4,28 +4,7 @@ use ragers_core::config::ConfigError;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-#[error("{0}")]
-pub struct NotFound(String);
-
-impl NotFound {
-    pub fn config_recipient(recipient: &str) -> Self {
-        NotFound(format!("recipient in config not found: {recipient}").to_owned())
-    }
-
-    pub fn config_group(group: &str) -> Self {
-        NotFound(format!("group in config not found: {group}").to_owned())
-    }
-
-    pub fn config_file(file: &str) -> Self {
-        NotFound(format!("file in config not found: {file}").to_owned())
-    }
-}
-
-#[derive(Error, Debug)]
 pub enum RecipientsFactoryError {
-    #[error(transparent)]
-    KeyInConfigNotFound(#[from] NotFound),
-
     #[error(transparent)]
     RecipientParseError(#[from] age::cli_common::ReadError),
 

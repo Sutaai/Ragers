@@ -1,12 +1,13 @@
 use std::{fs, path::PathBuf};
 
 use itertools::Itertools;
+use ragers_core::config::get_processable_files;
 use same_file::is_same_file;
 
 use crate::{
     cli::{
         IdentityArg, get_decrypted_content, get_encrypted_content, get_identities,
-        get_processable_files, get_ragers_editor,
+        get_ragers_editor,
     },
     context::Context,
     error::{CmdError, WithPath},
@@ -22,7 +23,7 @@ pub fn edit(
         return Ok(());
     }
 
-    let all_processable_files = get_processable_files(ctx)?;
+    let all_processable_files = get_processable_files(ctx.config, &ctx.recipients_factory)?;
     let matching_file = all_processable_files
         .iter()
         .find(|file| {

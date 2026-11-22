@@ -1,17 +1,15 @@
-use std::fs::read_to_string;
+use std::{fs::read_to_string, str::FromStr};
 
 use clap::{CommandFactory, Parser};
 
 use crate::{
     cli::{Cli, cmd},
-    config::get_closest_config_path,
     error::{CmdError, WithPath},
 };
 
-use ragers_core::config::{ConfigContent, ConfigFile};
+use ragers_core::config::{ConfigContent, ConfigFile, get_closest_config_path};
 
 mod cli;
-mod config;
 mod context;
 mod error;
 
@@ -38,7 +36,9 @@ fn wrap_execution(cli: Cli) -> Result<(), CmdError> {
         if let Some(custom_config_path) = &cli.config_path {
             custom_config_path.clone()
         } else {
-            match get_closest_config_path().result_with_path(None)? {
+            match get_closest_config_path(&std::env::current_dir().result_with_path(None)?)
+                .result_with_path(None)?
+            {
                 Some(path) => path,
                 None => {
                     return Err(CmdError::Io {
