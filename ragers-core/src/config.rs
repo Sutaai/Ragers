@@ -193,6 +193,7 @@ impl ProcessableFile {
 ///
 /// The value will be the either the key it refers to for recipients files or groups, or the public
 /// key for direct recipients.
+#[derive(Debug, Eq, PartialEq)]
 pub enum AliasKind {
     DirectRecipient(String),
     RecipientsFile(String),
@@ -453,5 +454,123 @@ impl<'config> RecipientsFactory<'config> {
         }
 
         Ok(fetched_recipients)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use tempfile::TempDir;
+
+    use super::*;
+
+    fn setup_recipients_file(content: &str) -> (TempDir, PathBuf) {
+        let temp_dir = tempfile::tempdir().expect("could not create tempdir");
+        let dir_path = temp_dir.path();
+        let file = dir_path.join("recipients.txt");
+
+        std::fs::write(&file, content).expect("could not write to recipients file1");
+
+        (temp_dir, file)
+    }
+
+    #[test]
+    fn test_get_alias_kind() {
+        assert_eq!(
+            get_alias_kind("direct"),
+            AliasKind::DirectRecipient("direct".to_string())
+        );
+
+        assert_eq!(
+            get_alias_kind("group:group"),
+            AliasKind::Group("group".to_string())
+        );
+
+        assert_eq!(
+            get_alias_kind("file:path"),
+            AliasKind::RecipientsFile("path".to_string())
+        );
+
+        assert_eq!(
+            get_alias_kind("invalid:direct"),
+            AliasKind::DirectRecipient("invalid:direct".to_string())
+        );
+    }
+
+    #[test]
+    fn test_read_recipients_file() {
+        let recipient = "age1tjeyws90hgr9gjp822u9lfd8a5qsjgm5jcxpevx99e6a9u74yf9syjdp3g";
+
+        let (_temp_dir, file) = setup_recipients_file(recipient);
+
+        let content = read_recipients_file(&file).expect("must be able to read file");
+
+        assert_eq!(vec![recipient], content)
+    }
+
+    #[test]
+    fn test_read_recipients_file_ignore_line() {
+        let recipients = vec![
+            "age1tjeyws90hgr9gjp822u9lfd8a5qsjgm5jcxpevx99e6a9u74yf9syjdp3g",
+            "age1pdsx9sk7mqrs450g5jdpt0xdzltlmnetzkr84spae3pvlvdxpc6q8lwrzz",
+            "age1tlga6vu2eyf8y6r2fc8zcq3p2s5kznxgnv3y3e0wdpg8l0yjjd6qt948x8",
+        ];
+        let mut recipients_comment = recipients.clone();
+        recipients_comment.insert(1, "# This is a comment");
+        recipients_comment.insert(3, "");
+        let content = recipients_comment.join("\n");
+
+        let (_temp_dir, file) = setup_recipients_file(&content);
+
+        let content = read_recipients_file(&file).expect("must be able to read file");
+
+        assert_eq!(recipients, content)
+    }
+
+    #[test]
+    fn test_attempt_convert_into_glob() {
+        let globs = vec![
+            "*.txt",
+            "src/*.js",
+            "test-*.log.*",
+            "src/**/*.js",
+            "*",
+            "**/config.json",
+            "test-??.log",
+            "log-202?-*.txt",
+            "file[123].txt",
+            "log-[0-9].txt",
+            "file[a-z].js",
+            "[!.]*.txt",
+            "*.{js,ts,jsx}",
+            "{src,test,lib}/**/*.js",
+            "{src,test}/{unit,integration}/*.js",
+            "file?(s).txt",
+            "readme?(.md)",
+            "+(test)-*.js",
+        ];
+
+        for glob in globs {
+            assert!(
+                attempt_convert_into_glob(glob)
+                    .expect("pattern issue")
+                    .is_some()
+            )
+        }
+
+        let paths = vec![
+            "test.txt",
+            "file.rs",
+            "subdir/file.rs",
+            "tests/",
+            "files.txt",
+        ];
+
+        for glob in paths {
+            assert!(
+                attempt_convert_into_glob(glob)
+                    .expect("pattern issue")
+                    .is_none()
+            )
+        }
     }
 }

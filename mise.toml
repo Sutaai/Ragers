@@ -5,6 +5,21 @@ prek = "0.5"
 rust = "1.97"
 uv = "0.13.7"
 
+# Reusable tasks for crates/sub-projects
+[tasks.test]
+description = "Run tests over the project"
+run = [
+    "cargo llvm-cov nextest --lcov --output-path lcov.info"
+]
+dir = "{{cwd}}"
+
+[tasks.test-crap]
+alias = ["crap"]
+depends = ["test"]
+description = "Run tests over the project"
+run = "cargo crap --lcov lcov.info"
+dir = "{{cwd}}"
+
 [tasks.test-hook]
 description = "Try the Ragers git hook"
 run = "prek try-repo . check-decrypted-files-ragers -a -v"
